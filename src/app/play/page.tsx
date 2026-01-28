@@ -22,7 +22,7 @@ export default function PlayJoinPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-zinc-950">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-background">
       <Link
         href="/"
         className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 mb-10"

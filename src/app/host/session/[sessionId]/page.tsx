@@ -282,7 +282,7 @@ export default function HostRemotePage({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-background">
         <Spinner />
       </div>
     );
@@ -300,9 +300,9 @@ export default function HostRemotePage({
     session.current_question_index >= questions.length - 1;
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
+    <div className="min-h-screen bg-zinc-50 dark:bg-background flex flex-col">
       {/* Header */}
-      <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+      <header className="bg-white dark:bg-slate-800 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
@@ -336,7 +336,7 @@ export default function HostRemotePage({
                 ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
                 : isPlaying
                 ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
+                : "bg-zinc-100 text-zinc-800 dark:bg-slate-800 dark:text-zinc-200"
             }`}
           >
             {isLobby ? "Lobby" : isPlaying ? "Playing" : "Finished"}
@@ -473,7 +473,7 @@ export default function HostRemotePage({
                   .map((p, i) => (
                     <div
                       key={p.id}
-                      className="flex items-center gap-2 text-sm px-3 py-1.5 rounded bg-white dark:bg-zinc-800"
+                      className="flex items-center gap-2 text-sm px-3 py-1.5 rounded bg-white dark:bg-slate-800"
                     >
                       <span className="font-bold text-zinc-400 w-6">
                         {i + 1}
@@ -525,7 +525,7 @@ export default function HostRemotePage({
                 .map((p, i) => (
                   <div
                     key={p.id}
-                    className="flex items-center gap-2 text-sm px-3 py-2 rounded bg-white dark:bg-zinc-800"
+                    className="flex items-center gap-2 text-sm px-3 py-2 rounded bg-white dark:bg-slate-800"
                   >
                     <span className="font-bold text-zinc-400 w-6">
                       #{i + 1}

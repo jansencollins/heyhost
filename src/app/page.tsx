@@ -18,7 +18,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-slate-700 transition-colors"
               aria-label="Toggle theme"
             >
               {theme === "dark" ? (

@@ -77,10 +77,10 @@ export default function DashboardPage() {
                   <span className="px-2 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
                     {game.difficulty}
                   </span>
-                  <span className="px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                  <span className="px-2 py-1 rounded-full bg-zinc-100 dark:bg-slate-700 text-zinc-600 dark:text-zinc-300">
                     {game.age_range.replace("_", " ")}
                   </span>
-                  <span className="px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                  <span className="px-2 py-1 rounded-full bg-zinc-100 dark:bg-slate-700 text-zinc-600 dark:text-zinc-300">
                     {game.timer_seconds}s timer
                   </span>
                 </div>

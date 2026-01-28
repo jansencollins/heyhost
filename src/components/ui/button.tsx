@@ -13,11 +13,11 @@ const variantStyles: Record<Variant, string> = {
   primary:
     "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600",
   secondary:
-    "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700",
+    "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-slate-800 dark:text-zinc-100 dark:hover:bg-slate-700",
   danger:
     "bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600",
   ghost:
-    "bg-transparent text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
+    "bg-transparent text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-slate-700",
 };
 
 const sizeStyles: Record<Size, string> = {

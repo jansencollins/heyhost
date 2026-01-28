@@ -33,7 +33,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="w-full max-w-lg rounded-xl bg-white dark:bg-zinc-800 shadow-xl">
+      <div className="w-full max-w-lg rounded-xl bg-white dark:bg-slate-800 shadow-xl">
         <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-700 px-6 py-4">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             {title}

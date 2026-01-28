@@ -341,7 +341,7 @@ export default function PlayerSessionPage({
 
   if (phase === "error") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-background">
         <div className="text-center">
           <p className="text-lg text-red-600 dark:text-red-400 mb-4">
             {error}
@@ -356,7 +356,7 @@ export default function PlayerSessionPage({
 
   if (phase === "removed") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-background">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
             You were removed
@@ -374,7 +374,7 @@ export default function PlayerSessionPage({
 
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-background">
         <Spinner />
       </div>
     );
@@ -383,7 +383,7 @@ export default function PlayerSessionPage({
   // Join form
   if (phase === "joining") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-background">
         <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mb-8">
           HeyHost
         </h1>
@@ -446,7 +446,7 @@ export default function PlayerSessionPage({
   // Lobby
   if (phase === "lobby" || (session.status === "lobby" && player)) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-background">
         <h1 className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">
           HeyHost
         </h1>
@@ -495,7 +495,7 @@ export default function PlayerSessionPage({
     questionState
   ) {
     return (
-      <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-background">
         {/* Timer bar */}
         <div className="p-4 flex items-center justify-between">
           <span className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -572,7 +572,7 @@ export default function PlayerSessionPage({
       (c) => c.is_correct
     );
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-background">
         <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-4">
           Results
         </h2>
@@ -606,7 +606,7 @@ export default function PlayerSessionPage({
   if (phase === "leaderboard") {
     const sorted = [...players].sort((a, b) => b.score - a.score);
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-background">
         <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-6">
           Leaderboard
         </h2>
@@ -617,7 +617,7 @@ export default function PlayerSessionPage({
               className={`flex items-center gap-3 px-4 py-2 rounded-lg ${
                 p.id === player?.id
                   ? "bg-indigo-50 dark:bg-indigo-900/30"
-                  : "bg-white dark:bg-zinc-800"
+                  : "bg-white dark:bg-slate-800"
               }`}
             >
               <span className="text-lg font-bold text-zinc-400 w-8">
@@ -651,7 +651,7 @@ export default function PlayerSessionPage({
     const myRank = sorted.findIndex((p) => p.id === player?.id) + 1;
 
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-50 dark:bg-background">
         <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
           Game Over!
         </h1>
@@ -676,7 +676,7 @@ export default function PlayerSessionPage({
               className={`flex items-center gap-3 px-4 py-2 rounded-lg ${
                 p.id === player?.id
                   ? "bg-indigo-50 dark:bg-indigo-900/30"
-                  : "bg-white dark:bg-zinc-800"
+                  : "bg-white dark:bg-slate-800"
               }`}
             >
               <span className="text-lg font-bold text-zinc-400 w-8">
@@ -706,7 +706,7 @@ export default function PlayerSessionPage({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-background">
       <Spinner />
     </div>
   );

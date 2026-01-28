@@ -21,8 +21,8 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+    <div className="min-h-screen bg-zinc-50 dark:bg-background">
+      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-slate-800">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link
             href="/dashboard"
@@ -33,7 +33,7 @@ export default function DashboardLayout({
           <div className="flex items-center gap-2">
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-slate-700 transition-colors"
               aria-label="Toggle theme"
             >
               {theme === "dark" ? (
