@@ -124,12 +124,12 @@ export default function NewGamePage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-6">
-        Create New Game
+      <h1 className="text-3xl font-bold text-text-primary tracking-tight mb-6">
+        CREATE NEW GAME
       </h1>
 
       <Card className="mb-6">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+        <h2 className="text-lg font-semibold text-text-primary mb-4">
           Game Settings
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -158,7 +158,7 @@ export default function NewGamePage() {
             options={DIFFICULTY_OPTIONS}
           />
           <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+            <label className="block text-sm font-medium text-text-secondary mb-1">
               Questions ({questionCount})
             </label>
             <input
@@ -167,11 +167,11 @@ export default function NewGamePage() {
               max={20}
               value={questionCount}
               onChange={(e) => setQuestionCount(Number(e.target.value))}
-              className="w-full accent-indigo-600"
+              className="w-full glass-range"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+            <label className="block text-sm font-medium text-text-secondary mb-1">
               Timer ({timerSeconds}s)
             </label>
             <input
@@ -181,16 +181,16 @@ export default function NewGamePage() {
               step={5}
               value={timerSeconds}
               onChange={(e) => setTimerSeconds(Number(e.target.value))}
-              className="w-full accent-indigo-600"
+              className="w-full glass-range"
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
               <input
                 type="checkbox"
                 checked={speedBonus}
                 onChange={(e) => setSpeedBonus(e.target.checked)}
-                className="rounded accent-indigo-600"
+                className="rounded glass-range"
               />
               Speed bonus (faster answers earn more points)
             </label>
@@ -208,7 +208,7 @@ export default function NewGamePage() {
       </Card>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
+        <div className="mb-4 p-3 rounded-lg bg-red-900/20 text-red-400 text-sm">
           {error}
         </div>
       )}
