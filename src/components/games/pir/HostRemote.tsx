@@ -1,37 +1,30 @@
 "use client";
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToSession, unsubscribe } from "@/lib/realtime";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { isInPenaltyZone } from "@/lib/pir-scoring";
 import type {
   Session,
   SessionPlayer,
-  SessionQuestionState,
-  GameQuestion,
-  SessionAnswer,
+  PriceIsRightItem,
+  PriceGuess,
 } from "@/lib/types";
+import type { HostRemoteProps } from "@/lib/game-registry";
 
-export default function HostRemotePage({
-  params,
-}: {
-  params: Promise<{ sessionId: string }>;
-}) {
-  const { sessionId } = use(params);
+export default function PIRHostRemote({ sessionId }: HostRemoteProps) {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [players, setPlayers] = useState<SessionPlayer[]>([]);
-  const [questions, setQuestions] = useState<GameQuestion[]>([]);
-  const [questionState, setQuestionState] =
-    useState<SessionQuestionState | null>(null);
-  const [answers, setAnswers] = useState<SessionAnswer[]>([]);
+  const [items, setItems] = useState<PriceIsRightItem[]>([]);
+  const [guesses, setGuesses] = useState<PriceGuess[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timerSeconds, setTimerSeconds] = useState(30);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Load initial data
   useEffect(() => {
     async function load() {
       const supabase = createClient();
@@ -49,25 +42,20 @@ export default function HostRemotePage({
 
       setSession(sessionData);
 
-      // Load game timer setting
       const { data: gameData } = await supabase
         .from("games")
-        .select("timer_seconds")
+        .select("*, price_is_right_items(*)")
         .eq("id", sessionData.game_id)
-        .single();
+        .maybeSingle();
 
-      if (gameData) setTimerSeconds(gameData.timer_seconds);
+      if (gameData?.price_is_right_items) {
+        setItems(
+          gameData.price_is_right_items.sort(
+            (a: PriceIsRightItem, b: PriceIsRightItem) => a.item_order - b.item_order
+          )
+        );
+      }
 
-      // Load questions
-      const { data: questionsData } = await supabase
-        .from("game_questions")
-        .select("*")
-        .eq("game_id", sessionData.game_id)
-        .order("question_order", { ascending: true });
-
-      setQuestions(questionsData || []);
-
-      // Load players
       const { data: playersData } = await supabase
         .from("session_players")
         .select("*")
@@ -76,29 +64,13 @@ export default function HostRemotePage({
 
       setPlayers(playersData || []);
 
-      // Load current question state if playing
-      if (sessionData.current_question_index >= 0) {
-        const { data: qsData } = await supabase
-          .from("session_question_state")
+      if (sessionData.pir_current_item_id) {
+        const { data: guessData } = await supabase
+          .from("price_guesses")
           .select("*")
           .eq("session_id", sessionId)
-          .eq("question_index", sessionData.current_question_index)
-          .maybeSingle();
-
-        if (qsData) setQuestionState(qsData);
-      }
-
-      // Load answers for current question
-      if (sessionData.current_question_index >= 0 && questionsData) {
-        const currentQ = questionsData[sessionData.current_question_index];
-        if (currentQ) {
-          const { data: answersData } = await supabase
-            .from("session_answers")
-            .select("*")
-            .eq("session_id", sessionId)
-            .eq("question_id", currentQ.id);
-          setAnswers(answersData || []);
-        }
+          .eq("item_id", sessionData.pir_current_item_id);
+        setGuesses(guessData || []);
       }
 
       setLoading(false);
@@ -107,7 +79,6 @@ export default function HostRemotePage({
     load();
   }, [sessionId, router]);
 
-  // Subscribe to realtime
   useEffect(() => {
     if (!session) return;
 
@@ -127,12 +98,12 @@ export default function HostRemotePage({
           }
         }
       },
-      onQuestionStateChange: (payload) => {
-        setQuestionState(payload.new as SessionQuestionState);
-      },
-      onAnswerChange: (payload) => {
+      onPriceGuessChange: (payload) => {
+        const g = payload.new as PriceGuess;
         if (payload.eventType === "INSERT") {
-          setAnswers((prev) => [...prev, payload.new as SessionAnswer]);
+          setGuesses((prev) => [...prev.filter((x) => x.player_id !== g.player_id), g]);
+        } else if (payload.eventType === "UPDATE") {
+          setGuesses((prev) => prev.map((x) => (x.id === g.id ? g : x)));
         }
       },
     });
@@ -140,145 +111,62 @@ export default function HostRemotePage({
     return () => unsubscribe(channel);
   }, [session?.id]);
 
-  const startGame = useCallback(async () => {
-    if (!session || questions.length === 0) return;
-    const supabase = createClient();
+  useEffect(() => {
+    if (!session || session.status !== "playing" || items.length > 0) return;
 
-    // Move session to playing, set question index 0
-    await supabase
-      .from("sessions")
-      .update({ status: "playing", current_question_index: 0 })
-      .eq("id", session.id);
-
-    // Create question state for first question
-    const now = new Date();
-    const endsAt = new Date(now.getTime() + timerSeconds * 1000);
-
-    await supabase.from("session_question_state").insert({
-      session_id: session.id,
-      question_index: 0,
-      question_id: questions[0].id,
-      started_at: now.toISOString(),
-      ends_at: endsAt.toISOString(),
-      is_paused: false,
-      is_locked: false,
-      show_results: false,
-    });
-
-    setAnswers([]);
-  }, [session, questions, timerSeconds]);
-
-  const pauseResume = useCallback(async () => {
-    if (!questionState || !session) return;
-    const supabase = createClient();
-
-    if (questionState.is_paused) {
-      // Resume: calculate new ends_at based on remaining time
-      const remainingMs = questionState.paused_remaining_ms || 0;
-      const newEndsAt = new Date(Date.now() + remainingMs);
-      await supabase
-        .from("session_question_state")
-        .update({
-          is_paused: false,
-          paused_remaining_ms: null,
-          started_at: new Date(
-            Date.now() - (timerSeconds * 1000 - remainingMs)
-          ).toISOString(),
-          ends_at: newEndsAt.toISOString(),
-        })
-        .eq("id", questionState.id);
-    } else {
-      // Pause: save remaining time
-      const remaining = Math.max(
-        0,
-        new Date(questionState.ends_at!).getTime() - Date.now()
-      );
-      await supabase
-        .from("session_question_state")
-        .update({
-          is_paused: true,
-          paused_remaining_ms: remaining,
-        })
-        .eq("id", questionState.id);
-    }
-  }, [questionState, session, timerSeconds]);
-
-  const endQuestionEarly = useCallback(async () => {
-    if (!questionState || !session) return;
-    const supabase = createClient();
-    await supabase
-      .from("session_question_state")
-      .update({ is_locked: true, show_results: true })
-      .eq("id", questionState.id);
-  }, [questionState, session]);
-
-  const showLeaderboard = useCallback(async () => {
-    if (!questionState || !session) return;
-    const supabase = createClient();
-    await supabase
-      .from("session_question_state")
-      .update({ show_leaderboard: true })
-      .eq("id", questionState.id);
-  }, [questionState, session]);
-
-  const nextQuestion = useCallback(async () => {
-    if (!session || !questions.length) return;
-    const supabase = createClient();
-    const nextIndex = session.current_question_index + 1;
-
-    if (nextIndex >= questions.length) {
-      // End game
-      await supabase
-        .from("sessions")
-        .update({ status: "finished", ended_at: new Date().toISOString() })
-        .eq("id", session.id);
-      return;
-    }
-
-    // Update session index
-    await supabase
-      .from("sessions")
-      .update({ current_question_index: nextIndex })
-      .eq("id", session.id);
-
-    // Create question state for next question
-    const now = new Date();
-    const endsAt = new Date(now.getTime() + timerSeconds * 1000);
-
-    await supabase.from("session_question_state").insert({
-      session_id: session.id,
-      question_index: nextIndex,
-      question_id: questions[nextIndex].id,
-      started_at: now.toISOString(),
-      ends_at: endsAt.toISOString(),
-      is_paused: false,
-      is_locked: false,
-      show_results: false,
-    });
-
-    setAnswers([]);
-  }, [session, questions, timerSeconds]);
-
-  const kickPlayer = useCallback(
-    async (playerId: string) => {
-      if (!session) return;
+    async function refetchItems() {
       const supabase = createClient();
-      await supabase
-        .from("session_players")
-        .update({ is_removed: true })
-        .eq("id", playerId);
+      const { data: gameData } = await supabase
+        .from("games")
+        .select("*, price_is_right_items(*)")
+        .eq("id", session!.game_id)
+        .maybeSingle();
+
+      if (gameData?.price_is_right_items?.length) {
+        setItems(
+          gameData.price_is_right_items.sort(
+            (a: PriceIsRightItem, b: PriceIsRightItem) => a.item_order - b.item_order
+          )
+        );
+      }
+    }
+
+    refetchItems();
+  }, [session?.status, session?.game_id, items.length]);
+
+  const callAction = useCallback(
+    async (action: string, extra: Record<string, unknown> = {}) => {
+      setActionLoading(true);
+      try {
+        const res = await fetch("/api/pir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, sessionId, ...extra }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        if (action === "next_item" || action === "start_game") {
+          setGuesses([]);
+        }
+
+        return data;
+      } catch (err) {
+        console.error(`Action ${action} failed:`, err);
+      } finally {
+        setActionLoading(false);
+      }
     },
-    [session]
+    [sessionId]
   );
 
-  const endGame = useCallback(async () => {
-    if (!session) return;
+  const kickPlayer = useCallback(async (playerId: string) => {
     const supabase = createClient();
     await supabase
-      .from("sessions")
-      .update({ status: "finished", ended_at: new Date().toISOString() })
-      .eq("id", session.id);
-  }, [session]);
+      .from("session_players")
+      .update({ is_removed: true })
+      .eq("id", playerId);
+  }, []);
 
   if (loading) {
     return (
@@ -293,20 +181,22 @@ export default function HostRemotePage({
   const isLobby = session.status === "lobby";
   const isPlaying = session.status === "playing";
   const isFinished = session.status === "finished";
-  const currentQ = isPlaying
-    ? questions[session.current_question_index]
-    : null;
-  const isLastQuestion =
-    session.current_question_index >= questions.length - 1;
+  const phase = session.pir_phase;
+  const currentItem = items.find((i) => i.id === session.pir_current_item_id);
+  const currentItemIndex = session.pir_current_item_order || 0;
+  const isLastItem = currentItemIndex >= items.length - 1;
+
+  const penaltyPlayers = guesses.filter(
+    (g) => g.tier && isInPenaltyZone(g.tier)
+  );
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-background flex flex-col">
-      {/* Header */}
       <header className="bg-white dark:bg-slate-800 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-              Host Remote
+              That Costs How Much!? - Host
             </h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Code:{" "}
@@ -328,7 +218,6 @@ export default function HostRemotePage({
       </header>
 
       <div className="flex-1 p-4 space-y-4 max-w-lg mx-auto w-full">
-        {/* Status */}
         <div className="text-center">
           <span
             className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
@@ -339,11 +228,10 @@ export default function HostRemotePage({
                 : "bg-zinc-100 text-zinc-800 dark:bg-slate-800 dark:text-zinc-200"
             }`}
           >
-            {isLobby ? "Lobby" : isPlaying ? "Playing" : "Finished"}
+            {isLobby ? "Lobby" : isPlaying ? `Playing - ${phase}` : "Finished"}
           </span>
         </div>
 
-        {/* Lobby Controls */}
         {isLobby && (
           <>
             <div className="text-center">
@@ -365,103 +253,129 @@ export default function HostRemotePage({
                     <button
                       onClick={() => kickPlayer(p.id)}
                       className="text-red-400 hover:text-red-600 ml-1"
-                      title="Remove player"
                     >
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
                 ))}
               </div>
               {players.length === 0 && (
-                <p className="text-zinc-400 dark:text-zinc-500 text-sm">
-                  Waiting for players to join...
-                </p>
+                <p className="text-zinc-400 text-sm">Waiting for players...</p>
               )}
             </div>
 
             <Button
-              onClick={startGame}
+              onClick={() => callAction("start_game")}
               disabled={players.length === 0}
+              loading={actionLoading}
               className="w-full"
               size="lg"
             >
-              Start Game ({questions.length} questions)
+              Start Game ({items.length} items)
             </Button>
           </>
         )}
 
-        {/* Playing Controls */}
-        {isPlaying && currentQ && (
+        {isPlaying && !currentItem && (
+          <div className="text-center py-8">
+            <Spinner />
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">Loading item...</p>
+          </div>
+        )}
+
+        {isPlaying && currentItem && (
           <>
             <div className="text-center">
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Question {session.current_question_index + 1} of{" "}
-                {questions.length}
+                Item {currentItemIndex + 1} of {items.length}
               </p>
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mt-1">
-                {currentQ.prompt}
+                {currentItem.name}
               </p>
             </div>
 
             <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-              Answers: {answers.length} / {players.length}
+              Guesses: {guesses.length} / {players.length}
             </div>
 
-            {questionState && !questionState.show_results && !questionState.is_locked ? (
-              /* Step 1: Question is live — host can pause or end early */
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <Button onClick={pauseResume} variant="secondary">
-                    {questionState.is_paused ? "Resume" : "Pause"}
-                  </Button>
-                  <Button onClick={endQuestionEarly} variant="secondary">
-                    End Question
-                  </Button>
-                </div>
-              </div>
-            ) : questionState?.show_results && !questionState.show_leaderboard ? (
-              /* Step 2: Results are showing — host can advance to leaderboard */
+            {phase === "guessing" && (
+              <Button
+                onClick={() => callAction("show_price_result")}
+                loading={actionLoading}
+                className="w-full"
+                size="lg"
+              >
+                Reveal Price
+              </Button>
+            )}
+
+            {phase === "price_result" && (
               <div className="space-y-3">
                 <p className="text-center text-sm font-medium text-green-600 dark:text-green-400">
-                  Showing results
+                  Showing price result
+                </p>
+                {penaltyPlayers.length > 0 ? (
+                  <Button
+                    onClick={() => callAction("pay_the_price")}
+                    loading={actionLoading}
+                    className="w-full"
+                    size="lg"
+                    variant="danger"
+                  >
+                    Pay The Price! ({penaltyPlayers.length} players)
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => callAction("show_leaderboard")}
+                    loading={actionLoading}
+                    className="w-full"
+                    size="lg"
+                  >
+                    Show Leaderboard
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {phase === "pay_the_price" && (
+              <div className="space-y-3">
+                <p className="text-center text-sm font-medium text-red-600 dark:text-red-400">
+                  Spinning the wheel...
                 </p>
                 <Button
-                  onClick={showLeaderboard}
+                  onClick={() => callAction("show_leaderboard")}
+                  loading={actionLoading}
                   className="w-full"
                   size="lg"
                 >
                   Show Leaderboard
                 </Button>
               </div>
-            ) : questionState?.show_leaderboard ? (
-              /* Step 3: Leaderboard is showing — host can go to next question */
+            )}
+
+            {phase === "leaderboard" && (
               <div className="space-y-3">
                 <p className="text-center text-sm font-medium text-indigo-600 dark:text-indigo-400">
                   Showing leaderboard
                 </p>
                 <Button
-                  onClick={nextQuestion}
+                  onClick={async () => {
+                    const result = await callAction("next_item");
+                    if (result?.finished) {
+                      // Game ended
+                    }
+                  }}
+                  loading={actionLoading}
                   className="w-full"
                   size="lg"
                 >
-                  {isLastQuestion ? "Finish Game" : "Next Question"}
+                  {isLastItem ? "Finish Game" : "Next Item"}
                 </Button>
               </div>
-            ) : null}
+            )}
 
-            {/* Leaderboard preview */}
             <div className="mt-4">
               <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
                 Leaderboard
@@ -475,9 +389,7 @@ export default function HostRemotePage({
                       key={p.id}
                       className="flex items-center gap-2 text-sm px-3 py-1.5 rounded bg-white dark:bg-slate-800"
                     >
-                      <span className="font-bold text-zinc-400 w-6">
-                        {i + 1}
-                      </span>
+                      <span className="font-bold text-zinc-400 w-6">{i + 1}</span>
                       <div
                         className="w-5 h-5 rounded-full flex-shrink-0"
                         style={{ backgroundColor: p.avatar_color }}
@@ -492,18 +404,8 @@ export default function HostRemotePage({
                         onClick={() => kickPlayer(p.id)}
                         className="text-red-400 hover:text-red-600"
                       >
-                        <svg
-                          className="h-3.5 w-3.5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
                     </div>
@@ -513,7 +415,6 @@ export default function HostRemotePage({
           </>
         )}
 
-        {/* Finished */}
         {isFinished && (
           <div className="text-center">
             <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-4">
@@ -527,9 +428,7 @@ export default function HostRemotePage({
                     key={p.id}
                     className="flex items-center gap-2 text-sm px-3 py-2 rounded bg-white dark:bg-slate-800"
                   >
-                    <span className="font-bold text-zinc-400 w-6">
-                      #{i + 1}
-                    </span>
+                    <span className="font-bold text-zinc-400 w-6">#{i + 1}</span>
                     <div
                       className="w-6 h-6 rounded-full"
                       style={{ backgroundColor: p.avatar_color }}
@@ -549,13 +448,13 @@ export default function HostRemotePage({
           </div>
         )}
 
-        {/* End game button (always available during play) */}
         {isPlaying && (
           <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
             <Button
               variant="danger"
               size="sm"
-              onClick={endGame}
+              onClick={() => callAction("finish_game")}
+              loading={actionLoading}
               className="w-full"
             >
               End Game Now

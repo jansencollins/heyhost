@@ -38,6 +38,30 @@
   --blob-blue: rgba(59, 130, 246, 0.07);
   --blob-cyan: rgba(6, 182, 212, 0.04);
   --blob-pink: rgba(236, 72, 153, 0.04);
+
+  /* ============================
+     Rebrand tokens — cream/editorial
+     Scope: dashboard + login/signup only.
+     Gameplay screens continue to use the dark palette above.
+     ============================ */
+  --cream:     #F4EDE0;
+  --paper:     #FBF6EC;
+  --ink:       #1A1412;
+  --smoke:     #6B625A;
+  --dune:      #E8DFCE;
+  --coral:     #FF5B3B;
+  --sunflower: #F5C518;
+  --violet:    #6C4BF5;
+  --teal:      #14B8A6;
+  --magenta:   #EC4899;
+  --lime:      #A3E635;
+
+  --r-sm: 8px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-pill: 999px;
+
+  --shadow-soft: 0 10px 40px -16px rgba(26, 20, 18, 0.12);
 }
 
 .dark {
@@ -84,6 +108,23 @@
 
   --font-sans: var(--font-dm-sans), "DM Sans", system-ui, sans-serif;
   --font-heading: var(--font-montserrat), "Montserrat", system-ui, sans-serif;
+
+  /* Rebrand color utilities (bg-cream, text-ink, border-dune, ...) */
+  --color-cream: var(--cream);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-smoke: var(--smoke);
+  --color-dune: var(--dune);
+  --color-coral: var(--coral);
+  --color-sunflower: var(--sunflower);
+  --color-violet-brand: var(--violet);
+  --color-teal-brand: var(--teal);
+  --color-magenta-brand: var(--magenta);
+  --color-lime-brand: var(--lime);
+
+  /* Rebrand font utilities (font-display, font-body) */
+  --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ============================
@@ -210,6 +251,50 @@ h1, h2, h3, h4, h5, h6 {
 .gradient-card.gradient-orange { background: linear-gradient(135deg, #f97316, #ec4899); }
 .gradient-card.gradient-purple { background: linear-gradient(135deg, #8b5cf6, #3b82f6); }
 .gradient-card.gradient-cyan { background: linear-gradient(135deg, #06b6d4, #10b981); }
+
+/* Liquid glass card */
+.liquid-glass-card {
+  position: relative;
+  border-radius: 20px;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  overflow: hidden;
+}
+.liquid-glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    transparent 100%
+  );
+  border-radius: 20px 20px 0 0;
+  pointer-events: none;
+}
+.liquid-glass-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+}
 
 /* Sidebar */
 .glass-sidebar {
@@ -480,4 +565,357 @@ a:hover .sidebar-icon {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.35);
+}
+
+/* ============================
+   Rebrand — dashboard + login/signup
+   Scoped under .rebrand / [data-theme="cream"] so gameplay is unaffected.
+   ============================ */
+
+.rebrand {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+.rebrand::before {
+  display: none; /* drop the dark body image on rebranded pages */
+}
+
+/* Kill the dark body background + image whenever a rebrand page is rendered,
+   so overscroll/rubber-band reveals cream (not the old navy). */
+html:has(.rebrand),
+html:has(.rebrand) body {
+  background-color: var(--cream);
+}
+html:has(.rebrand) body::before {
+  display: none;
+}
+.rebrand h1,
+.rebrand h2,
+.rebrand h3,
+.rebrand h4,
+.rebrand h5,
+.rebrand h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+  color: var(--ink);
+}
+
+/* Sidebar variant — paper panel with dune divider */
+.sidebar-rebrand {
+  background: var(--paper) !important;
+  border-right: 1px solid var(--dune) !important;
+  color: var(--ink);
+}
+
+/* Nav items */
+.nav-rebrand {
+  color: var(--ink);
+  border-radius: var(--r-pill);
+  border: 1.5px solid transparent; /* reserve space so active state doesn't shift layout */
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.nav-rebrand:hover {
+  background: color-mix(in srgb, var(--dune) 60%, transparent);
+}
+.nav-rebrand.is-active {
+  background: var(--dune);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.nav-rebrand .sidebar-icon,
+.nav-rebrand .sidebar-icon-active {
+  filter: brightness(0);
+  opacity: 0.82;
+}
+.nav-rebrand.is-active .sidebar-icon,
+.nav-rebrand.is-active .sidebar-icon-active {
+  filter: brightness(0);
+  opacity: 1;
+}
+
+/* Inputs */
+.input-rebrand {
+  background: var(--paper);
+  border: 1px solid var(--dune);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  padding: 16px 18px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-family: var(--font-body);
+}
+.input-rebrand::placeholder {
+  color: var(--smoke);
+}
+.input-rebrand:focus {
+  outline: none;
+  border-color: var(--coral);
+  box-shadow: 0 0 0 1px var(--coral);
+}
+
+/* Pill-shaped search variant */
+.input-rebrand-pill {
+  border-radius: var(--r-pill);
+  padding: 12px 20px;
+}
+
+/* Filter pills */
+.filter-pill {
+  background: var(--paper);
+  border: 1px solid var(--dune);
+  border-radius: var(--r-pill);
+  color: var(--ink);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.filter-pill:hover {
+  border-color: color-mix(in srgb, var(--ink) 25%, var(--dune));
+}
+.filter-pill.is-active {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* Card on paper */
+.card-rebrand {
+  background: var(--paper);
+  border: 1px solid var(--dune);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-rebrand:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Cards inside tab panels get a slightly darker border so they
+   visually separate from the panel's muted background. */
+.tab-panel .card-rebrand {
+  border-color: color-mix(in srgb, var(--smoke) 35%, var(--dune));
+}
+
+/* Anchor card: stays put on hover (used for the editor header). */
+.card-anchor:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Tab panel enter animation — soft pop-in with subtle stagger. */
+@keyframes tab-panel-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.tab-panel-enter > * {
+  /* Gentle ease-out with a whisper of overshoot */
+  animation: tab-panel-enter 0.55s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+  transform-origin: 50% 60%;
+  will-change: transform, opacity;
+}
+.tab-panel-enter > *:nth-child(1)  { animation-delay: 0ms; }
+.tab-panel-enter > *:nth-child(2)  { animation-delay: 50ms; }
+.tab-panel-enter > *:nth-child(3)  { animation-delay: 100ms; }
+.tab-panel-enter > *:nth-child(4)  { animation-delay: 150ms; }
+.tab-panel-enter > *:nth-child(5)  { animation-delay: 200ms; }
+.tab-panel-enter > *:nth-child(6)  { animation-delay: 240ms; }
+.tab-panel-enter > *:nth-child(n+7) { animation-delay: 280ms; }
+
+/* Nested grandchildren (e.g. cards inside a settings grid) animate too */
+.tab-panel-enter > * > * {
+  animation: tab-panel-enter 0.5s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+.tab-panel-enter > * > *:nth-child(1)  { animation-delay: 30ms; }
+.tab-panel-enter > * > *:nth-child(2)  { animation-delay: 70ms; }
+.tab-panel-enter > * > *:nth-child(3)  { animation-delay: 110ms; }
+.tab-panel-enter > * > *:nth-child(n+4) { animation-delay: 140ms; }
+
+/* Modal entrance animation — backdrop fades, card pops in */
+@keyframes modal-backdrop-enter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modal-card-enter {
+  from { opacity: 0; transform: translateY(80px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.modal-backdrop-enter {
+  animation: modal-backdrop-enter 0.18s ease both;
+}
+.modal-card-enter {
+  animation: modal-card-enter 0.4s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+
+/* Status & tag chips */
+.chip-rebrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  letter-spacing: 0.01em;
+}
+.chip-status-ready     { background: color-mix(in srgb, var(--lime) 30%, var(--paper)); color: #355c10; }
+.chip-status-draft     { background: var(--dune); color: var(--smoke); }
+.chip-status-recent    { background: color-mix(in srgb, var(--smoke) 20%, var(--paper)); color: var(--smoke); }
+.chip-accent-coral     { background: color-mix(in srgb, var(--coral) 15%, var(--paper));     color: var(--coral); }
+.chip-accent-sunflower { background: color-mix(in srgb, var(--sunflower) 22%, var(--paper)); color: #7a5700; }
+.chip-accent-violet    { background: color-mix(in srgb, var(--violet) 15%, var(--paper));    color: var(--violet); }
+.chip-accent-teal      { background: color-mix(in srgb, var(--teal) 18%, var(--paper));      color: #0f766e; }
+.chip-accent-magenta   { background: color-mix(in srgb, var(--magenta) 15%, var(--paper));   color: var(--magenta); }
+.chip-accent-lime      { background: color-mix(in srgb, var(--lime) 30%, var(--paper));      color: #3f6c11; }
+
+/* Buttons */
+.btn-cta {
+  background: var(--coral);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-radius: var(--r-pill);
+  transition: filter 0.15s ease, transform 0.1s ease;
+  box-shadow: 0 6px 20px -8px rgba(255, 91, 59, 0.5);
+}
+.btn-cta:hover { filter: brightness(0.95); }
+.btn-cta:active { transform: scale(0.98); }
+
+.btn-cta-ghost {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--dune);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-radius: var(--r-pill);
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.btn-cta-ghost:hover { background: color-mix(in srgb, var(--dune) 30%, var(--paper)); }
+.btn-cta-ghost:active { transform: scale(0.98); }
+
+.btn-cta-danger {
+  background: #B91C1C;
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-radius: var(--r-pill);
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+.btn-cta-danger:hover { filter: brightness(1.1); }
+.btn-cta-danger:active { transform: scale(0.98); }
+
+/* Logout as plain link */
+.logout-link {
+  color: var(--smoke);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+.logout-link:hover { color: var(--ink); }
+
+/* Nav icon: white fill + 1px ink stroke (simulated via 4-direction drop-shadow) */
+.nav-icon-light {
+  filter:
+    brightness(0) invert(1)
+    drop-shadow(1px 0 0 var(--ink))
+    drop-shadow(-1px 0 0 var(--ink))
+    drop-shadow(0 1px 0 var(--ink))
+    drop-shadow(0 -1px 0 var(--ink));
+}
+
+/* Range slider (rebrand) */
+input[type="range"].range-rebrand {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--dune);
+  outline: none;
+}
+input[type="range"].range-rebrand::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--coral);
+  border: 2px solid var(--paper);
+  box-shadow: 0 2px 6px rgba(255, 91, 59, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+input[type="range"].range-rebrand::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+}
+input[type="range"].range-rebrand::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--coral);
+  border: 2px solid var(--paper);
+  box-shadow: 0 2px 6px rgba(255, 91, 59, 0.35);
+  cursor: pointer;
+}
+
+/* Checkbox (rebrand) */
+.checkbox-rebrand {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--dune);
+  background: var(--paper);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+.checkbox-rebrand:checked {
+  background: var(--coral);
+  border-color: var(--coral);
+}
+.checkbox-rebrand:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 9px;
+  border: solid var(--paper);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Display type helper */
+.display-xl {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+  font-size: clamp(32px, 3.2vw, 44px);
+  color: var(--ink);
 }

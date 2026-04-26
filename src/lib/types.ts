@@ -1,12 +1,51 @@
 export type AgeRange = "teenagers" | "young_adults" | "older_adults" | "mix";
 export type Difficulty = "easy" | "medium" | "hard" | "mix";
 export type SessionStatus = "lobby" | "playing" | "finished";
+export type GameType = "trivia" | "price_is_right";
+export type PIRPhase = "guessing" | "price_result" | "pay_the_price" | "leaderboard";
+export type DisplayMode = "tv" | "on_the_go";
 
 export interface Profile {
   id: string;
   display_name: string;
+  avatar_url: string | null;
+  referral_code: string;
+  referred_by_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type ThemeFont =
+  | "Montserrat"
+  | "DM Sans"
+  | "Inter"
+  | "Poppins"
+  | "Space Grotesk"
+  | "Outfit"
+  | "Sora"
+  | "Raleway"
+  | "Nunito"
+  | "Bebas Neue"
+  | "Oswald"
+  | "Playfair Display";
+
+export interface GameTheme {
+  id: string;
+  name: string;
+  bg: string;
+  surface: string;
+  surfaceLight: string;
+  accent: string;
+  accentDim: string;
+  textPrimary: string;
+  textMuted: string;
+  textDim: string;
+  border: string;
+  danger: string;
+  headingFont: ThemeFont;
+  bodyFont: ThemeFont;
+  bodyTextMode: "light" | "dark";
+  buttonTextMode: "light" | "dark";
 }
 
 export interface Game {
@@ -14,10 +53,18 @@ export interface Game {
   host_id: string;
   title: string;
   topic: string;
+  game_type: GameType;
   age_range: AgeRange;
   difficulty: Difficulty;
   timer_seconds: number;
   speed_bonus: boolean;
+  show_percent: boolean;
+  round_prices: boolean;
+  is_shared: boolean;
+  penalty_cheap: string | null;
+  penalty_expensive: string | null;
+  penalty_margin: number;
+  theme: GameTheme | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +95,12 @@ export interface Session {
   current_question_index: number;
   timer_seconds: number;
   speed_bonus: boolean;
+  // PIR-specific fields
+  pir_current_item_id: string | null;
+  pir_current_item_order: number;
+  pir_item_end_timestamp: string | null;
+  pir_phase: PIRPhase;
+  display_mode: DisplayMode;
   created_at: string;
   ended_at: string | null;
 }
@@ -116,4 +169,52 @@ export interface GameQuestionWithChoices extends GameQuestion {
 
 export interface GameWithQuestions extends Game {
   game_questions: GameQuestionWithChoices[];
+}
+
+// ============================================================
+// Price Is Right Types
+// ============================================================
+
+export interface PriceIsRightItem {
+  id: string;
+  game_id: string;
+  item_order: number;
+  name: string;
+  image: string | null;
+  price: number; // in cents
+  description: string | null;
+  difficulty: string;
+  created_at: string;
+}
+
+export interface PriceGuess {
+  id: string;
+  session_id: string;
+  player_id: string;
+  item_id: string;
+  guess: number;
+  score_awarded: number;
+  tier: string | null;
+  guess_accuracy: number;
+  paid_the_price: boolean;
+  created_at: string;
+}
+
+export interface PriceGuessWithPlayer extends PriceGuess {
+  session_players: SessionPlayer;
+}
+
+export interface PIRScoreEntry {
+  player: SessionPlayer;
+  guess: number | null;
+  score: number;
+  totalScore: number;
+  tier: string;
+  guessAccuracy: number | null;
+  totalAccuracy: number;
+  paidThePrice: boolean;
+}
+
+export interface GameWithItems extends Game {
+  price_is_right_items: PriceIsRightItem[];
 }

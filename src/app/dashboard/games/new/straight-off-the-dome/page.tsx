@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import type { AgeRange, Difficulty } from "@/lib/types";
+import { ThemePicker } from "@/components/games/ThemePicker";
+import { DEFAULT_THEME } from "@/lib/theme-presets";
+import type { AgeRange, Difficulty, GameTheme } from "@/lib/types";
 
 const AGE_OPTIONS = [
   { value: "teenagers", label: "Teenagers" },
@@ -32,6 +34,8 @@ export default function NewGamePage() {
   const [questionCount, setQuestionCount] = useState(10);
   const [timerSeconds, setTimerSeconds] = useState(30);
   const [speedBonus, setSpeedBonus] = useState(true);
+  const [isShared, setIsShared] = useState(false);
+  const [theme, setTheme] = useState<GameTheme>(DEFAULT_THEME.trivia);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
 
@@ -62,6 +66,8 @@ export default function NewGamePage() {
           difficulty,
           timer_seconds: timerSeconds,
           speed_bonus: speedBonus,
+          is_shared: isShared,
+          theme,
         })
         .select()
         .single();
@@ -124,41 +130,41 @@ export default function NewGamePage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold text-text-primary tracking-tight mb-6">
+      <h1 className="text-3xl font-bold text-ink tracking-tight mb-6">
         CREATE NEW GAME
       </h1>
 
-      <Card className="mb-6">
-        <h2 className="text-lg font-semibold text-text-primary mb-4">
+      <Card variant="paper" className="mb-6">
+        <h2 className="text-lg font-semibold text-ink mb-4">
           Game Settings
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input
+          <Input variant="paper"
             label="Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g., 90s Pop Culture Trivia"
           />
-          <Input
+          <Input variant="paper"
             label="Topic"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="e.g., 90s movies and music"
           />
-          <Select
+          <Select variant="paper"
             label="Age Range"
             value={ageRange}
             onChange={(e) => setAgeRange(e.target.value as AgeRange)}
             options={AGE_OPTIONS}
           />
-          <Select
+          <Select variant="paper"
             label="Difficulty"
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value as Difficulty)}
             options={DIFFICULTY_OPTIONS}
           />
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
+            <label className="block text-sm font-medium text-ink mb-1">
               Questions ({questionCount})
             </label>
             <input
@@ -167,11 +173,11 @@ export default function NewGamePage() {
               max={20}
               value={questionCount}
               onChange={(e) => setQuestionCount(Number(e.target.value))}
-              className="w-full glass-range"
+              className="w-full range-rebrand"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
+            <label className="block text-sm font-medium text-ink mb-1">
               Timer ({timerSeconds}s)
             </label>
             <input
@@ -181,24 +187,42 @@ export default function NewGamePage() {
               step={5}
               value={timerSeconds}
               onChange={(e) => setTimerSeconds(Number(e.target.value))}
-              className="w-full glass-range"
+              className="w-full range-rebrand"
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
               <input
                 type="checkbox"
                 checked={speedBonus}
                 onChange={(e) => setSpeedBonus(e.target.checked)}
-                className="rounded glass-range"
+                className="rounded range-rebrand"
               />
               Speed bonus (faster answers earn more points)
             </label>
           </div>
+          <div className="sm:col-span-2">
+            <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isShared}
+                onChange={(e) => setIsShared(e.target.checked)}
+                className="rounded range-rebrand"
+              />
+              Share this game on the Host Network
+            </label>
+            <p className="text-xs text-smoke/70 mt-1 ml-6">
+              Other hosts can discover and play your game from the Host Network.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <ThemePicker value={theme} onChange={setTheme} />
         </div>
 
         <div className="mt-6 flex gap-3">
-          <Button onClick={handleCreate} loading={creating}>
+          <Button variant="cta" onClick={handleCreate} loading={creating}>
             Create Game
           </Button>
           <Button variant="ghost" onClick={() => router.push("/dashboard")}>
@@ -208,7 +232,7 @@ export default function NewGamePage() {
       </Card>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-900/20 text-red-400 text-sm">
+        <div className="mb-4 p-3 rounded-lg bg-[color-mix(in_srgb,var(--coral)_12%,var(--paper))] text-coral text-sm">
           {error}
         </div>
       )}

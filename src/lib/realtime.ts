@@ -30,6 +30,7 @@ export function subscribeToSession(
     onPlayerChange?: RealtimeHandler;
     onQuestionStateChange?: RealtimeHandler;
     onAnswerChange?: RealtimeHandler;
+    onPriceGuessChange?: RealtimeHandler;
   }
 ): RealtimeChannel {
   const supabase = createClient();
@@ -85,6 +86,19 @@ export function subscribeToSession(
         filter: `session_id=eq.${sessionId}`,
       },
       handlers.onAnswerChange
+    );
+  }
+
+  if (handlers.onPriceGuessChange) {
+    channel = channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "price_guesses",
+        filter: `session_id=eq.${sessionId}`,
+      },
+      handlers.onPriceGuessChange
     );
   }
 

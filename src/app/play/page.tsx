@@ -3,22 +3,35 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { GameType } from "@/lib/types";
 
 export default function PlayJoinPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  const [joining, setJoining] = useState(false);
   const router = useRouter();
 
-  function handleJoin(e: React.FormEvent) {
+  async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
     const cleaned = code.trim().toUpperCase();
     if (!cleaned || cleaned.length < 5) {
       setError("Enter a valid game code");
       return;
     }
-    router.push(`/play/${cleaned}`);
+
+    setJoining(true);
+    setError("");
+
+    try {
+      // All game types now use the same route — the page dynamically
+      // loads the correct component based on game type
+      router.push(`/play/${cleaned}`);
+    } catch {
+      router.push(`/play/${cleaned}`);
+    }
   }
 
   return (
@@ -49,7 +62,7 @@ export default function PlayJoinPage() {
             error={error}
             autoFocus
           />
-          <Button type="submit" className="w-full" size="lg">
+          <Button type="submit" className="w-full" size="lg" loading={joining}>
             Join
           </Button>
         </form>

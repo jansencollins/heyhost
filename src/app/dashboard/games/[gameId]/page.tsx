@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, use } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,10 @@ import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Modal } from "@/components/ui/modal";
 import { generateGameCode } from "@/lib/game-code";
-import type { Game, GameQuestionWithChoices, AgeRange, Difficulty } from "@/lib/types";
+import { getGameTypeConfig } from "@/lib/game-registry";
+import { ThemePicker } from "@/components/games/ThemePicker";
+import { DEFAULT_THEME } from "@/lib/theme-presets";
+import type { Game, GameQuestionWithChoices, AgeRange, Difficulty, GameTheme, GeneratedQuestion } from "@/lib/types";
 
 const AGE_OPTIONS = [
   { value: "teenagers", label: "Teenagers" },
@@ -26,13 +30,13 @@ const DIFFICULTY_OPTIONS = [
 ];
 
 const CHOICE_COLORS = [
-  { bg: "bg-accent-pink/8", border: "border-accent-pink/25", dot: "bg-accent-pink", label: "A" },
-  { bg: "bg-accent-blue/8", border: "border-accent-blue/25", dot: "bg-accent-blue", label: "B" },
-  { bg: "bg-accent-yellow/8", border: "border-accent-yellow/25", dot: "bg-accent-yellow", label: "C" },
-  { bg: "bg-accent-green/8", border: "border-accent-green/25", dot: "bg-accent-green", label: "D" },
+  { bg: "bg-coral/8", border: "border-coral/25", dot: "bg-coral", label: "A" },
+  { bg: "bg-coral/8", border: "border-coral/25", dot: "bg-coral", label: "B" },
+  { bg: "bg-sunflower/8", border: "border-sunflower/25", dot: "bg-sunflower", label: "C" },
+  { bg: "bg-teal-brand/8", border: "border-teal-brand/25", dot: "bg-teal-brand", label: "D" },
 ];
 
-type Tab = "settings" | "questions";
+type Tab = "howto" | "settings" | "questions" | "preview";
 
 export default function GameDetailPage({
   params,
@@ -48,7 +52,7 @@ export default function GameDetailPage({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("settings");
+  const [activeTab, setActiveTab] = useState<Tab>("questions");
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
   const [generatingWrongIdx, setGeneratingWrongIdx] = useState<number | null>(null);
   const [addingQuestion, setAddingQuestion] = useState(false);
@@ -57,6 +61,17 @@ export default function GameDetailPage({
   const [bulkCount, setBulkCount] = useState(10);
   const [generatingBulk, setGeneratingBulk] = useState(false);
 
+  // Index of the question currently showing a delete-confirmation popover
+  const [confirmDeleteQIdx, setConfirmDeleteQIdx] = useState<number | null>(null);
+
+  // AI generation modal — count → loading → review
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiStep, setAiStep] = useState<"count" | "loading" | "review">("count");
+  const [aiCount, setAiCount] = useState(5);
+  const [aiGenerated, setAiGenerated] = useState<GeneratedQuestion[]>([]);
+  const [aiIncluded, setAiIncluded] = useState<Set<number>>(new Set());
+  const [aiSaving, setAiSaving] = useState(false);
+
   // Editable settings state
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
@@ -64,6 +79,8 @@ export default function GameDetailPage({
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [timerSeconds, setTimerSeconds] = useState(30);
   const [speedBonus, setSpeedBonus] = useState(true);
+  const [isShared, setIsShared] = useState(false);
+  const [theme, setTheme] = useState<GameTheme>(DEFAULT_THEME.trivia);
 
   // Autosave refs
   const settingsTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -72,7 +89,7 @@ export default function GameDetailPage({
   questionsRef.current = questions;
   const lastSavedSettingsRef = useRef({
     title: "", topic: "", ageRange: "mix" as AgeRange, difficulty: "medium" as Difficulty,
-    timerSeconds: 30, speedBonus: true,
+    timerSeconds: 30, speedBonus: true, isShared: false,
   });
   const savedStatusTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -98,6 +115,12 @@ export default function GameDetailPage({
       return;
     }
 
+    // Redirect PIR games to dedicated edit page
+    if (gameData.game_type === "price_is_right") {
+      router.replace(`/dashboard/games/${gameId}/that-costs-how-much`);
+      return;
+    }
+
     setGame(gameData);
     setTitle(gameData.title);
     setTopic(gameData.topic);
@@ -105,10 +128,13 @@ export default function GameDetailPage({
     setDifficulty(gameData.difficulty);
     setTimerSeconds(gameData.timer_seconds);
     setSpeedBonus(gameData.speed_bonus);
+    setIsShared(gameData.is_shared || false);
+    setTheme(gameData.theme || DEFAULT_THEME.trivia);
     lastSavedSettingsRef.current = {
       title: gameData.title, topic: gameData.topic,
       ageRange: gameData.age_range, difficulty: gameData.difficulty,
       timerSeconds: gameData.timer_seconds, speedBonus: gameData.speed_bonus,
+      isShared: gameData.is_shared || false,
     };
 
     const { data: questionsData } = await supabase
@@ -136,7 +162,8 @@ export default function GameDetailPage({
     if (
       title === last.title && topic === last.topic &&
       ageRange === last.ageRange && difficulty === last.difficulty &&
-      timerSeconds === last.timerSeconds && speedBonus === last.speedBonus
+      timerSeconds === last.timerSeconds && speedBonus === last.speedBonus &&
+      isShared === last.isShared
     ) return;
 
     clearTimeout(settingsTimerRef.current);
@@ -155,6 +182,8 @@ export default function GameDetailPage({
             difficulty,
             timer_seconds: timerSeconds,
             speed_bonus: speedBonus,
+            is_shared: isShared,
+            theme,
           })
           .eq("id", game.id);
 
@@ -162,10 +191,10 @@ export default function GameDetailPage({
 
         lastSavedSettingsRef.current = {
           title: title.trim(), topic: topic.trim(),
-          ageRange, difficulty, timerSeconds, speedBonus,
+          ageRange, difficulty, timerSeconds, speedBonus, isShared,
         };
         setGame((g) =>
-          g ? { ...g, title: title.trim(), topic: topic.trim(), age_range: ageRange, difficulty, timer_seconds: timerSeconds, speed_bonus: speedBonus } : g
+          g ? { ...g, title: title.trim(), topic: topic.trim(), age_range: ageRange, difficulty, timer_seconds: timerSeconds, speed_bonus: speedBonus, is_shared: isShared } : g
         );
         setSaveStatus("saved");
         clearTimeout(savedStatusTimerRef.current);
@@ -176,7 +205,7 @@ export default function GameDetailPage({
     }, 800);
 
     return () => clearTimeout(settingsTimerRef.current);
-  }, [title, topic, ageRange, difficulty, timerSeconds, speedBonus, game]);
+  }, [title, topic, ageRange, difficulty, timerSeconds, speedBonus, isShared, theme, game]);
 
   function scheduleQuestionSave(questionId: string) {
     const existing = questionTimersRef.current.get(questionId);
@@ -473,6 +502,100 @@ export default function GameDetailPage({
     }
   }
 
+  function openAIGenerator() {
+    setError("");
+    setAiGenerated([]);
+    setAiIncluded(new Set());
+    setAiStep("count");
+    setAiModalOpen(true);
+  }
+
+  async function runAIGeneration() {
+    if (!game) return;
+    setAiStep("loading");
+    setError("");
+    try {
+      const res = await fetch("/api/generate-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: game.topic,
+          ageRange: game.age_range,
+          difficulty: game.difficulty,
+          count: aiCount,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to generate questions");
+      const data = await res.json();
+      const generated: GeneratedQuestion[] = data.questions || [];
+      setAiGenerated(generated);
+      // Default: include all
+      setAiIncluded(new Set(generated.map((_, i) => i)));
+      setAiStep("review");
+    } catch {
+      setAiModalOpen(false);
+      setError("Failed to generate questions");
+    }
+  }
+
+  async function saveAIQuestions() {
+    if (!game) return;
+    const toAdd = aiGenerated.filter((_, i) => aiIncluded.has(i));
+    if (toAdd.length === 0) {
+      setAiModalOpen(false);
+      return;
+    }
+    setAiSaving(true);
+    setError("");
+    try {
+      const supabase = createClient();
+      const startOrder = questions.length;
+      const inserted: GameQuestionWithChoices[] = [];
+
+      for (let i = 0; i < toAdd.length; i++) {
+        const q = toAdd[i];
+        const { data: newQuestion, error: qError } = await supabase
+          .from("game_questions")
+          .insert({
+            game_id: game.id,
+            question_order: startOrder + i,
+            prompt: q.prompt,
+            explanation: q.explanation || null,
+          })
+          .select()
+          .single();
+        if (qError) throw qError;
+
+        const choices = q.choices.map((c, j) => ({
+          question_id: newQuestion.id,
+          choice_text: c.text,
+          is_correct: c.isCorrect,
+          choice_order: j,
+        }));
+        const { data: insertedChoices, error: cError } = await supabase
+          .from("game_question_choices")
+          .insert(choices)
+          .select();
+        if (cError) throw cError;
+
+        inserted.push({
+          ...newQuestion,
+          game_question_choices: (insertedChoices || []).sort(
+            (a: { choice_order: number }, b: { choice_order: number }) =>
+              a.choice_order - b.choice_order
+          ),
+        });
+      }
+
+      setQuestions((prev) => [...prev, ...inserted]);
+      setAiModalOpen(false);
+    } catch {
+      setError("Failed to save generated questions");
+    } finally {
+      setAiSaving(false);
+    }
+  }
+
   async function handleRemoveQuestion(qIdx: number) {
     const q = questions[qIdx];
     setError("");
@@ -584,7 +707,12 @@ export default function GameDetailPage({
 
       if (sessionError) throw sessionError;
 
-      router.push(`/host/session/${session.id}`);
+      // Route to unified host page
+      if (typeof window !== "undefined") {
+        window.open(`/host/${session.id}`, "_blank", "noopener,noreferrer");
+      }
+      setStartingSession(false);
+      return;
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Failed to start session"
@@ -661,108 +789,158 @@ export default function GameDetailPage({
     if (questionId) scheduleQuestionSave(questionId);
   }
 
-  /* ─── Loading state ─── */
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4">
-        <Spinner className="h-10 w-10" />
-        <p className="text-text-muted text-sm">Loading game...</p>
-      </div>
-    );
-  }
-
-  if (!game) return null;
+  /* ─── Silent loading: the editor shell renders immediately and dynamic
+        values fall back to empty strings until `game` arrives. ─── */
 
   const difficultyLabel: Record<string, { text: string; color: string }> = {
-    easy: { text: "Easy", color: "text-accent-green" },
-    medium: { text: "Medium", color: "text-accent-yellow" },
-    hard: { text: "Hard", color: "text-accent-pink" },
-    mix: { text: "Mix", color: "text-accent-purple" },
+    easy: { text: "Easy", color: "text-teal-brand" },
+    medium: { text: "Medium", color: "text-sunflower" },
+    hard: { text: "Hard", color: "text-coral" },
+    mix: { text: "Mix", color: "text-violet-brand" },
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-12">
-      {/* ═══════ Hero Header ═══════ */}
-      <div className="mb-8" style={{ animation: "slide-up 0.4s ease" }}>
-        {/* Back link */}
+    <div>
+      {/* Header bar + tabs (combined, connected to tab panel below) */}
+      <div
+        className="card-rebrand card-anchor relative z-10"
+        style={{
+          background: "var(--paper)",
+          borderColor: "rgba(0,0,0,0.18)",
+          borderBottomLeftRadius: 0,
+          borderBottomRightRadius: 0,
+          borderBottomWidth: 0,
+          overflow: "visible",
+        }}
+      >
+      <div className="p-6 lg:p-7 flex items-center gap-4">
         <button
           onClick={() => router.push("/dashboard")}
-          className="inline-flex items-center gap-1.5 text-sm text-text-muted hover:text-indigo-400 transition-colors mb-4"
+          className="text-smoke hover:text-ink transition shrink-0"
+          aria-label="Back"
+          title="Back to dashboard"
         >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          All Games
         </button>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-3xl font-bold tracking-tight text-text-primary mb-2">
-              {game.title}
-            </h1>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-              <span className="text-text-secondary">{game.topic}</span>
-              <span className="text-text-muted">|</span>
-              <span className={difficultyLabel[game.difficulty]?.color || "text-text-secondary"}>
-                {difficultyLabel[game.difficulty]?.text || game.difficulty}
-              </span>
-              <span className="text-text-muted">|</span>
-              <span className="text-text-secondary">
-                {game.age_range.replace("_", " ")}
-              </span>
-              <span className="text-text-muted">|</span>
-              <span className="text-accent-blue">{game.timer_seconds}s</span>
+        <span
+          className="w-12 h-12 rounded-full flex items-center justify-center border-2 border-ink shrink-0"
+          style={{ background: "var(--violet)" }}
+        >
+          <Image
+            src="/straight-off-dome-icon.svg"
+            alt=""
+            width={28}
+            height={28}
+            className="nav-icon-light"
+          />
+        </span>
 
-              {/* Save status */}
-              {saveStatus === "saving" && (
-                <span className="ml-2 inline-flex items-center gap-1 text-xs text-text-muted">
-                  <span className="h-1.5 w-1.5 rounded-full bg-accent-yellow animate-pulse" />
-                  Saving
-                </span>
-              )}
-              {saveStatus === "saved" && (
-                <span className="ml-2 inline-flex items-center gap-1 text-xs text-accent-green">
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Saved
-                </span>
-              )}
-              {saveStatus === "error" && (
-                <span className="ml-2 text-xs text-accent-pink">Save failed</span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-shrink-0 pt-1">
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="p-2 rounded-xl text-text-muted hover:text-accent-pink hover:bg-accent-pink/10 transition-all"
-              title="Delete game"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-            <Button
-              onClick={handleStartSession}
-              loading={startingSession}
-              disabled={questions.length === 0}
-              size="lg"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Start Live
-            </Button>
-          </div>
+        <div className="flex-1 min-w-0">
+          <h1 className="font-display font-bold text-[32px] text-ink tracking-[-0.025em] leading-[1.05] truncate">
+            Straight Off The Dome
+          </h1>
+          {game?.title && (
+            <p className="text-[14px] text-smoke font-medium mt-1 truncate">
+              <span className="italic">{game.title}</span> Edition
+            </p>
+          )}
+          {(saveStatus === "saving" || saveStatus === "saved" || saveStatus === "error") && (
+            <p className="text-[13px] flex items-center gap-2 mt-1">
+              {saveStatus === "saving" && <span className="text-smoke/70">Saving…</span>}
+              {saveStatus === "saved" && <span className="text-teal-brand">Saved</span>}
+              {saveStatus === "error" && <span className="text-coral">Save failed</span>}
+            </p>
+          )}
         </div>
+
+        {/* Start cluster */}
+        <button
+          type="button"
+          onClick={handleStartSession}
+          disabled={questions.length === 0 || startingSession}
+          className="flex items-center gap-2 px-5 py-1.5 text-[14px] font-display font-semibold tracking-[-0.01em] rounded-full border-2 border-ink transition-[filter,transform] disabled:opacity-60 disabled:cursor-not-allowed hover:brightness-95 active:scale-[0.98]"
+          style={{ background: "var(--lime)", color: "var(--ink)" }}
+        >
+          <span className="inline-flex items-center justify-center w-7 h-7">
+            <Image
+              src="/host-game.svg"
+              alt=""
+              width={24}
+              height={24}
+              className="nav-icon-light"
+            />
+          </span>
+          {startingSession ? "Starting…" : "Start Game"}
+        </button>
+
+        <button
+          onClick={() => setShowDeleteModal(true)}
+          className="p-2 rounded-full text-smoke hover:text-coral hover:bg-[color-mix(in_srgb,var(--coral)_12%,var(--paper))] transition shrink-0"
+          title="Delete game"
+          aria-label="Delete game"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
       </div>
 
-      {/* ═══════ Error banner ═══════ */}
+      {/* Tabs */}
+      {(() => {
+        const tabs: Tab[] = ["howto", "settings", "questions", "preview"];
+        const activeIdx = tabs.indexOf(activeTab);
+        const activeCenterPct = ((activeIdx + 0.5) / tabs.length) * 100;
+        return (
+          <div className="relative flex border-t border-dune divide-x divide-dune">
+            {tabs.map((tab) => {
+              const label =
+                tab === "howto"
+                  ? "How to Play"
+                  : tab === "settings"
+                    ? "Gameplay Settings"
+                    : tab === "questions"
+                      ? `Questions (${questions.length})`
+                      : "Game Preview";
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 px-5 py-4 text-[17px] font-semibold font-display tracking-[-0.01em] transition ${
+                    activeTab === tab
+                      ? "bg-ink text-paper"
+                      : "text-smoke hover:bg-dune/60 hover:text-ink"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                left: `${activeCenterPct}%`,
+                transform: "translateX(-50%)",
+                bottom: "-11px",
+                width: 0,
+                height: 0,
+                borderLeft: "12px solid transparent",
+                borderRight: "12px solid transparent",
+                borderTop: "12px solid var(--ink)",
+                zIndex: 30,
+                pointerEvents: "none",
+              }}
+            />
+          </div>
+        );
+      })()}
+      </div>
+
       {error && (
-        <div className="mb-6 px-4 py-3 rounded-xl bg-accent-pink/10 border border-accent-pink/20 text-accent-pink text-sm flex items-center gap-2" style={{ animation: "slide-up 0.3s ease" }}>
+        <div className="mt-4 px-4 py-3 rounded-xl bg-coral/10 border border-coral/20 text-coral text-sm flex items-center gap-2">
           <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
@@ -770,77 +948,154 @@ export default function GameDetailPage({
         </div>
       )}
 
-      {/* ═══════ Tabs ═══════ */}
-      <div className="flex gap-1 mb-8 p-1 rounded-2xl bg-surface-raised border border-surface-border" style={{ animation: "slide-up 0.5s ease" }}>
-        {(["settings", "questions"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 ${
-              activeTab === tab
-                ? "bg-white/10 text-text-primary shadow-sm backdrop-blur-xl border border-white/10"
-                : "text-text-muted hover:text-text-primary"
-            }`}
-          >
-            {tab === "settings" ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Settings
-              </span>
-            ) : (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Questions ({questions.length})
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* How to Play Tab */}
+      {activeTab === "howto" && (
+        <div
+          className="card-rebrand card-anchor tab-panel p-5 lg:p-6 pt-7 lg:pt-8 border-t-0 tab-panel-enter"
+          style={{
+            background: "#ECE3D0",
+            boxShadow: "inset 0 6px 12px -6px rgba(0,0,0,0.18)",
+            borderColor: "rgba(0,0,0,0.18)",
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+          }}
+        >
+          <TriviaHowToPlay />
+        </div>
+      )}
 
       {/* ═══════ Settings Tab ═══════ */}
       {activeTab === "settings" && (
-        <div style={{ animation: "slide-up 0.3s ease" }}>
-          <div className="glass-card p-8">
-            <h2 className="text-xl font-bold text-accent-blue mb-6">
-              Game Settings
-            </h2>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Input
-                label="Title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., 90s Pop Culture Trivia"
+        <div
+          className="card-rebrand card-anchor tab-panel p-5 lg:p-6 pt-7 lg:pt-8 border-t-0 tab-panel-enter"
+          style={{
+            background: "#ECE3D0",
+            boxShadow: "inset 0 6px 12px -6px rgba(0,0,0,0.18)",
+            borderColor: "rgba(0,0,0,0.18)",
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+          }}
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-6 gap-5">
+            {/* Row 1 — Title (wide) + Host Network (narrow) */}
+            <section className="card-rebrand p-6 lg:col-span-4">
+              <SettingsHeader
+                title="Game Title"
+                description="Name your game — this is what your players will see on their phones and the TV."
               />
-              <Input
-                label="Topic"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="e.g., 90s movies and music"
-              />
-              <Select
-                label="Age Range"
-                value={ageRange}
-                onChange={(e) => setAgeRange(e.target.value as AgeRange)}
-                options={AGE_OPTIONS}
-              />
-              <Select
-                label="Difficulty"
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value as Difficulty)}
-                options={DIFFICULTY_OPTIONS}
-              />
+              <div className="mt-5">
+                <Input
+                  variant="paper"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g., 90s Pop Culture Trivia"
+                  className="font-bold"
+                />
+              </div>
+            </section>
 
-              {/* Timer slider */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1.5">
-                  Timer
-                </label>
-                <div className="flex items-center gap-3">
+            <section className="card-rebrand p-6 lg:col-span-2">
+              <div className="flex items-start gap-4 mb-4">
+                <span
+                  className="w-11 h-11 rounded-full flex items-center justify-center border-2 border-ink shrink-0"
+                  style={{ background: "var(--magenta)" }}
+                >
+                  <Image
+                    src="/host-network.svg"
+                    alt=""
+                    width={24}
+                    height={24}
+                    className="nav-icon-light"
+                  />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-display font-semibold text-[24px] text-ink tracking-[-0.02em] leading-[1.1] mb-1.5">
+                    Host Network
+                  </h3>
+                  <p className="text-[13px] text-smoke leading-relaxed">
+                    Publish this game so other hosts can discover and play it. Great games climb the leaderboard.
+                  </p>
+                </div>
+              </div>
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <span
+                  role="switch"
+                  aria-checked={isShared}
+                  className={`relative w-11 h-6 rounded-full border-2 border-ink shrink-0 transition-colors ${
+                    isShared ? "bg-magenta-brand" : "bg-paper"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isShared}
+                    onChange={(e) => setIsShared(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <span
+                    className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-ink transition-transform"
+                    style={{ transform: isShared ? "translateX(20px)" : "translateX(0)" }}
+                  />
+                </span>
+                <span className="text-[13px] text-ink font-medium">
+                  {isShared ? "Published" : "Keep private"}
+                </span>
+              </label>
+            </section>
+
+            {/* Row 2 — Topic + Audience */}
+            <section className="card-rebrand p-6 lg:col-span-3">
+              <SettingsHeader
+                title="Question Topic"
+                description="What the AI should write questions about. Be specific — narrow topics make for punchier rounds."
+              />
+              <div className="mt-5">
+                <Input
+                  variant="paper"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g., 90s movies and music"
+                />
+              </div>
+            </section>
+
+            <section className="card-rebrand p-6 lg:col-span-3">
+              <SettingsHeader
+                title="Audience"
+                description="Age range and difficulty shape how the AI writes the questions."
+              />
+              <div className="mt-5 grid grid-cols-2 gap-4">
+                <Select
+                  variant="paper"
+                  label="Age range"
+                  value={ageRange}
+                  onChange={(e) => setAgeRange(e.target.value as AgeRange)}
+                  options={AGE_OPTIONS}
+                />
+                <Select
+                  variant="paper"
+                  label="Difficulty"
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+                  options={DIFFICULTY_OPTIONS}
+                />
+              </div>
+            </section>
+
+            {/* Row 3 — Round Rules (timer + speed bonus) */}
+            <section className="card-rebrand p-6 lg:col-span-6">
+              <SettingsHeader
+                title="Round Rules"
+                description="How long each question stays on screen and whether being faster earns more points."
+              />
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <div>
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <span className="font-display font-bold text-[36px] text-ink leading-none tabular-nums">
+                      {timerSeconds}
+                    </span>
+                    <span className="font-display font-bold text-[18px] text-smoke">sec</span>
+                    <span className="ml-auto text-[12px] text-smoke">per question</span>
+                  </div>
                   <input
                     type="range"
                     min={10}
@@ -848,70 +1103,112 @@ export default function GameDetailPage({
                     step={5}
                     value={timerSeconds}
                     onChange={(e) => setTimerSeconds(Number(e.target.value))}
-                    className="glass-range flex-1"
+                    className="range-rebrand w-full"
+                    style={{
+                      background: `linear-gradient(to right, var(--coral) 0%, var(--coral) ${((timerSeconds - 10) / 50) * 100}%, var(--dune) ${((timerSeconds - 10) / 50) * 100}%, var(--dune) 100%)`,
+                    }}
                   />
-                  <span className="text-sm font-bold text-accent-blue tabular-nums w-10 text-right">
-                    {timerSeconds}s
-                  </span>
+                  <div className="mt-3 flex items-center justify-between text-[11px] text-smoke">
+                    <span>Quick (10s)</span>
+                    <span>Generous (60s)</span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Speed bonus toggle */}
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-3 text-sm text-text-secondary cursor-pointer select-none group">
-                  <input
-                    type="checkbox"
-                    checked={speedBonus}
-                    onChange={(e) => setSpeedBonus(e.target.checked)}
-                    className="glass-checkbox"
-                  />
-                  <span className="group-hover:text-text-primary transition-colors">
-                    Speed bonus (faster answers earn more)
+                <label className="flex items-start gap-3 rounded-2xl border-2 border-dune px-4 py-3 cursor-pointer select-none hover:border-ink/40 transition-colors">
+                  <span
+                    role="switch"
+                    aria-checked={speedBonus}
+                    className={`relative w-11 h-6 rounded-full border-2 border-ink shrink-0 transition-colors mt-0.5 ${
+                      speedBonus ? "bg-coral" : "bg-paper"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={speedBonus}
+                      onChange={(e) => setSpeedBonus(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <span
+                      className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-ink transition-transform"
+                      style={{ transform: speedBonus ? "translateX(20px)" : "translateX(0)" }}
+                    />
+                  </span>
+                  <span className="flex-1">
+                    <span className="block text-[14px] font-display font-semibold text-ink">
+                      Speed bonus
+                    </span>
+                    <span className="block text-[12px] text-smoke leading-snug mt-0.5">
+                      Faster correct answers earn more points. Turn off for a slower, knowledge-only game.
+                    </span>
                   </span>
                 </label>
               </div>
-            </div>
+            </section>
+
+            {/* Row 4 — Theme */}
+            <section className="card-rebrand p-6 lg:col-span-6">
+              <SettingsHeader
+                title="Theme"
+                description="How the game looks on the TV and on players' phones while you host."
+              />
+              <div className="mt-5">
+                <ThemePicker value={theme} onChange={setTheme} />
+              </div>
+            </section>
           </div>
         </div>
       )}
 
       {/* ═══════ Questions Tab ═══════ */}
       {activeTab === "questions" && (
-        <div style={{ animation: "slide-up 0.3s ease" }}>
+        <div
+          className="card-rebrand card-anchor tab-panel p-5 lg:p-6 pt-7 lg:pt-8 border-t-0 tab-panel-enter"
+          style={{
+            background: "#ECE3D0",
+            boxShadow: "inset 0 6px 12px -6px rgba(0,0,0,0.18)",
+            borderColor: "rgba(0,0,0,0.18)",
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+          }}
+        >
           {/* Header row */}
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xl font-bold text-accent-blue">
+            <h2 className="text-xl font-bold text-coral">
               {questions.length} {questions.length === 1 ? "Question" : "Questions"}
             </h2>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleAddQuestion}
-              loading={addingQuestion}
+            <button
+              type="button"
+              onClick={openAIGenerator}
+              className="inline-flex items-center gap-2 px-4 py-2 text-[14px] font-display font-semibold tracking-[-0.01em] rounded-full border-2 border-ink transition-[filter,transform] hover:brightness-95 active:scale-[0.98]"
+              style={{ background: "var(--coral)", color: "#FFFFFF" }}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Question
-            </Button>
+              <Image
+                src="/magic-icon.svg"
+                alt=""
+                width={18}
+                height={18}
+                className="nav-icon-light"
+              />
+              Generate Questions For Me
+            </button>
           </div>
 
           {questions.length === 0 ? (
             /* ─── Empty State ─── */
-            <div className="glass-card p-10 text-center border border-accent-purple/20">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-accent-blue/10 flex items-center justify-center">
-                <svg className="h-8 w-8 text-accent-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="card-rebrand p-10 text-center border border-violet-brand/20">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-coral/10 flex items-center justify-center">
+                <svg className="h-8 w-8 text-coral" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-text-primary mb-2">
+              <h3 className="text-lg font-bold text-ink mb-2">
                 No questions yet
               </h3>
-              <p className="text-text-muted mb-8 max-w-sm mx-auto">
+              <p className="text-smoke mb-8 max-w-sm mx-auto">
                 Generate questions with AI or add them one by one. The AI will match your topic, difficulty, and age range.
               </p>
               <div className="max-w-xs mx-auto">
-                <label className="block text-sm font-medium text-text-secondary mb-2">
+                <label className="block text-sm font-medium text-ink mb-2">
                   How many questions?
                 </label>
                 <div className="flex items-center gap-3 mb-5">
@@ -921,13 +1218,13 @@ export default function GameDetailPage({
                     max={20}
                     value={bulkCount}
                     onChange={(e) => setBulkCount(Number(e.target.value))}
-                    className="glass-range flex-1"
+                    className="range-rebrand flex-1"
                   />
-                  <span className="text-lg font-bold text-accent-blue tabular-nums w-8 text-center">
+                  <span className="text-lg font-bold text-coral tabular-nums w-8 text-center">
                     {bulkCount}
                   </span>
                 </div>
-                <Button
+                <Button variant="cta"
                   onClick={handleGenerateBulk}
                   loading={generatingBulk}
                   className="w-full"
@@ -964,96 +1261,133 @@ export default function GameDetailPage({
                 >
                   {/* Drop indicator line */}
                   {dragOverIdx === qIdx && dragIdx !== qIdx && (
-                    <div className="h-0.5 bg-accent-purple rounded-full mb-2" />
+                    <div className="h-0.5 bg-violet-brand rounded-full mb-2" />
                   )}
 
-                  <div className="glass-card p-5">
-                    {/* Card header */}
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-2">
-                        {/* Drag handle */}
-                        <button
-                          className="cursor-grab active:cursor-grabbing text-text-muted hover:text-indigo-400 transition-colors"
-                          title="Drag to reorder"
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
-                          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                            <circle cx="9" cy="6" r="1.5" />
-                            <circle cx="15" cy="6" r="1.5" />
-                            <circle cx="9" cy="12" r="1.5" />
-                            <circle cx="15" cy="12" r="1.5" />
-                            <circle cx="9" cy="18" r="1.5" />
-                            <circle cx="15" cy="18" r="1.5" />
+                  <article className="card-rebrand p-5">
+                    {/* Card header — grip + #N chip + AI actions + delete */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <span
+                        className="flex items-center justify-center text-smoke hover:text-ink cursor-grab active:cursor-grabbing select-none"
+                        title="Drag to reorder"
+                        aria-label="Drag to reorder"
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                          <circle cx="7" cy="5" r="1.4" />
+                          <circle cx="7" cy="10" r="1.4" />
+                          <circle cx="7" cy="15" r="1.4" />
+                          <circle cx="13" cy="5" r="1.4" />
+                          <circle cx="13" cy="10" r="1.4" />
+                          <circle cx="13" cy="15" r="1.4" />
+                        </svg>
+                      </span>
+                      <span className="inline-flex items-center px-3 h-9 rounded-full bg-dune border border-ink/20 font-display font-medium text-[13px] text-ink tabular-nums shrink-0 leading-none whitespace-nowrap">
+                        Question #{qIdx + 1}
+                      </span>
+
+                      <div className="flex-1" />
+
+                      {/* AI actions */}
+                      <button
+                        onClick={() => handleRegenerateQuestion(qIdx)}
+                        disabled={regeneratingIdx !== null}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-display font-semibold rounded-full border border-dune text-ink hover:border-ink/40 hover:bg-dune/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title="Regenerate the question with AI"
+                      >
+                        {regeneratingIdx === qIdx ? (
+                          <Spinner className="h-3.5 w-3.5" />
+                        ) : (
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                           </svg>
-                        </button>
-                        <span className="text-xs font-bold text-text-secondary tabular-nums">
-                          Question {qIdx + 1}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {/* AI action buttons */}
-                        <button
-                          onClick={() => handleRegenerateQuestion(qIdx)}
-                          disabled={regeneratingIdx !== null}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 hover:bg-indigo-500/20 disabled:opacity-30 transition-all"
-                        >
-                          {regeneratingIdx === qIdx ? (
-                            <Spinner className="h-3.5 w-3.5" />
-                          ) : (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                          )}
-                          Regenerate Question
-                        </button>
-                        <button
-                          onClick={() => handleGenerateWrongAnswers(qIdx)}
-                          disabled={generatingWrongIdx !== null}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 disabled:opacity-30 transition-all"
-                        >
-                          {generatingWrongIdx === qIdx ? (
-                            <Spinner className="h-3.5 w-3.5" />
-                          ) : (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                          )}
-                          Rewrite Wrong Answers
-                        </button>
+                        )}
+                        Regenerate a New Question
+                      </button>
+                      <button
+                        onClick={() => handleGenerateWrongAnswers(qIdx)}
+                        disabled={generatingWrongIdx !== null}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-display font-semibold rounded-full border border-dune text-ink hover:border-ink/40 hover:bg-dune/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title="Rewrite the wrong answer choices"
+                      >
+                        {generatingWrongIdx === qIdx ? (
+                          <Spinner className="h-3.5 w-3.5" />
+                        ) : (
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        )}
+                        Rewrite Wrong Answers
+                      </button>
 
-                        <div className="w-px h-4 bg-surface-border mx-0.5" />
-
-                        {/* Reorder & delete */}
+                      {/* Move + delete */}
+                      <div className="flex items-center gap-1 ml-2">
                         <button
                           onClick={() => handleMoveQuestion(qIdx, -1)}
                           disabled={qIdx === 0}
-                          className="p-1.5 rounded-lg text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 disabled:opacity-20 disabled:hover:bg-transparent transition-all"
+                          className="p-1.5 rounded-full text-smoke hover:text-ink hover:bg-dune/60 disabled:opacity-20 disabled:hover:bg-transparent transition"
                           title="Move up"
                         >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
                           </svg>
                         </button>
                         <button
                           onClick={() => handleMoveQuestion(qIdx, 1)}
                           disabled={qIdx === questions.length - 1}
-                          className="p-1.5 rounded-lg text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 disabled:opacity-20 disabled:hover:bg-transparent transition-all"
+                          className="p-1.5 rounded-full text-smoke hover:text-ink hover:bg-dune/60 disabled:opacity-20 disabled:hover:bg-transparent transition"
                           title="Move down"
                         >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                           </svg>
                         </button>
-                        <div className="w-px h-4 bg-surface-border mx-0.5" />
-                        <button
-                          onClick={() => handleRemoveQuestion(qIdx)}
-                          className="p-1.5 rounded-lg text-text-muted hover:text-accent-pink hover:bg-accent-pink/10 transition-all"
-                          title="Remove question"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={() => setConfirmDeleteQIdx(qIdx)}
+                            className={`p-1.5 rounded-full transition ${
+                              confirmDeleteQIdx === qIdx
+                                ? "text-coral bg-[color-mix(in_srgb,var(--coral)_10%,var(--paper))]"
+                                : "text-smoke hover:text-coral hover:bg-[color-mix(in_srgb,var(--coral)_10%,var(--paper))]"
+                            }`}
+                            title="Remove question"
+                            aria-label="Remove question"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                          {confirmDeleteQIdx === qIdx && (
+                            <div
+                              className="absolute right-0 top-full mt-2 z-20 w-60 rounded-2xl p-3 shadow-[0_10px_40px_-16px_rgba(26,20,18,0.25)]"
+                              style={{ background: "var(--paper)", border: "2px solid var(--ink)" }}
+                            >
+                              <p className="text-[13px] text-ink font-medium mb-3">
+                                Delete this question?
+                              </p>
+                              <div className="flex gap-2 justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteQIdx(null)}
+                                  className="px-3 py-1.5 text-[13px] font-display font-semibold rounded-full border border-dune text-ink hover:bg-dune/60 transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleRemoveQuestion(qIdx);
+                                    setConfirmDeleteQIdx(null);
+                                  }}
+                                  className="px-3 py-1.5 text-[13px] font-display font-semibold rounded-full text-paper"
+                                  style={{ background: "#B91C1C" }}
+                                >
+                                  Yes, delete
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1061,37 +1395,39 @@ export default function GameDetailPage({
                     <textarea
                       value={q.prompt}
                       onChange={(e) => updateQuestionPrompt(qIdx, e.target.value)}
-                      className="glass-input w-full px-3.5 py-2.5 text-sm mb-4 resize-none"
+                      className="w-full bg-paper border-2 border-dune rounded-2xl outline-none resize-none font-body font-bold text-[18px] text-ink leading-snug placeholder:text-ink/30 focus:border-ink/40 px-4 py-3 transition-colors mb-4"
                       rows={2}
-                      placeholder="Type your question..."
+                      placeholder="Type your question…"
                     />
 
-                    {/* Answer choices */}
-                    <div className="grid gap-2 sm:grid-cols-2 mb-4">
+                    {/* Answer choices — 2 cols, lettered tile per choice */}
+                    <div className="grid gap-2.5 sm:grid-cols-2">
                       {q.game_question_choices.map((c, cIdx) => {
                         const color = CHOICE_COLORS[cIdx % CHOICE_COLORS.length];
                         return (
-                          <div
+                          <label
                             key={c.id}
-                            className={`relative flex items-center gap-2 rounded-xl border px-3 py-2 transition-all ${
+                            className={`group/choice flex items-center gap-2.5 rounded-2xl border-2 px-3 py-2.5 transition-colors cursor-text ${
                               c.is_correct
-                                ? "bg-accent-green/10 border-accent-green/30 shadow-sm"
-                                : "border-surface-border hover:border-surface-border"
+                                ? "border-ink bg-[color-mix(in_srgb,var(--teal)_18%,var(--paper))]"
+                                : "border-dune bg-paper hover:border-ink/40"
                             }`}
                           >
-                            {/* Correct answer toggle */}
+                            {/* Letter / correct-answer toggle */}
                             <button
+                              type="button"
                               onClick={() => setCorrectChoice(qIdx, cIdx)}
-                              className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
+                              className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-[13px] border-2 border-ink transition-colors ${
                                 c.is_correct
-                                  ? "bg-emerald-600 text-white shadow-[0_0_10px_rgba(5,150,105,0.4)]"
-                                  : "bg-surface-raised text-text-muted hover:text-text-primary border border-surface-border"
+                                  ? "bg-teal-brand text-paper"
+                                  : "bg-paper text-ink hover:bg-dune"
                               }`}
                               title={c.is_correct ? "Correct answer" : "Mark as correct"}
+                              aria-label={c.is_correct ? `${color.label} — correct answer` : `Mark ${color.label} as correct`}
                             >
                               {c.is_correct ? (
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                 </svg>
                               ) : (
                                 color.label
@@ -1102,45 +1438,221 @@ export default function GameDetailPage({
                             <input
                               value={c.choice_text}
                               onChange={(e) => updateChoiceText(qIdx, cIdx, e.target.value)}
-                              className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none min-w-0"
-                              placeholder={`Choice ${color.label}`}
+                              className="flex-1 min-w-0 bg-transparent border-0 outline-none font-body text-[14px] text-ink placeholder:text-ink/30"
+                              placeholder={`Answer ${color.label}`}
                             />
 
-                            {/* Reorder arrows */}
-                            <div className="flex flex-col flex-shrink-0 -mr-1">
+                            {/* Reorder arrows — only visible on hover of the choice */}
+                            <div className="flex flex-col shrink-0 opacity-0 group-hover/choice:opacity-100 focus-within:opacity-100 transition-opacity">
                               <button
+                                type="button"
                                 onClick={() => moveChoice(qIdx, cIdx, -1)}
                                 disabled={cIdx === 0}
-                                className="p-0.5 text-text-muted hover:text-indigo-400 disabled:opacity-20 transition-colors"
+                                className="p-0.5 text-smoke hover:text-ink disabled:opacity-20 transition-colors"
                                 title="Move up"
                               >
-                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
                                 </svg>
                               </button>
                               <button
+                                type="button"
                                 onClick={() => moveChoice(qIdx, cIdx, 1)}
                                 disabled={cIdx === q.game_question_choices.length - 1}
-                                className="p-0.5 text-text-muted hover:text-indigo-400 disabled:opacity-20 transition-colors"
+                                className="p-0.5 text-smoke hover:text-ink disabled:opacity-20 transition-colors"
                                 title="Move down"
                               >
-                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                                 </svg>
                               </button>
                             </div>
-                          </div>
+                          </label>
                         );
                       })}
                     </div>
-
-                  </div>
+                  </article>
                 </div>
               ))}
+
+              {/* Add question manually — dashed tile at the bottom of the list */}
+              <button
+                onClick={handleAddQuestion}
+                disabled={addingQuestion}
+                className="group w-full mt-3 rounded-2xl border-2 border-dashed border-dune hover:border-ink transition-colors flex items-center justify-center gap-3 py-4 text-center disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span className="w-9 h-9 rounded-full flex items-center justify-center border-2 border-ink bg-coral transition-transform duration-200 group-hover:scale-110">
+                  <svg className="w-4 h-4 text-paper" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                  </svg>
+                </span>
+                <span className="font-display font-semibold text-[14px] text-ink">
+                  {addingQuestion ? "Adding…" : "Add question manually"}
+                </span>
+              </button>
             </div>
           )}
         </div>
       )}
+
+      {/* Game Preview Tab — placeholder */}
+      {activeTab === "preview" && (
+        <div
+          className="card-rebrand card-anchor tab-panel p-5 lg:p-6 pt-7 lg:pt-8 border-t-0 tab-panel-enter"
+          style={{
+            background: "#ECE3D0",
+            boxShadow: "inset 0 6px 12px -6px rgba(0,0,0,0.18)",
+            borderColor: "rgba(0,0,0,0.18)",
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+          }}
+        >
+          <div className="min-h-[320px] flex items-center justify-center text-center text-smoke text-[14px]">
+            Game preview coming soon.
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ AI Generation Modal ═══════ */}
+      <Modal
+        open={aiModalOpen}
+        onClose={() => !aiSaving && setAiModalOpen(false)}
+        title={
+          aiStep === "count"
+            ? "Generate questions with AI"
+            : aiStep === "loading"
+              ? "Generating…"
+              : `Review ${aiGenerated.length} question${aiGenerated.length === 1 ? "" : "s"}`
+        }
+      >
+        {aiStep === "count" && (
+          <div>
+            <p className="text-[14px] text-smoke leading-relaxed mb-5">
+              How many questions should we draft? We&apos;ll use your topic
+              {game?.topic ? <> (<span className="italic">{game.topic}</span>)</> : ""}, age range, and
+              difficulty. You&apos;ll review each one before anything gets added.
+            </p>
+            <label className="block text-[11px] uppercase tracking-wider font-semibold text-smoke mb-2">
+              Number of questions
+            </label>
+            <div className="flex items-center gap-4 mb-2">
+              <input
+                type="range"
+                min={1}
+                max={20}
+                value={aiCount}
+                onChange={(e) => setAiCount(Number(e.target.value))}
+                className="range-rebrand flex-1"
+                style={{
+                  background: `linear-gradient(to right, var(--coral) 0%, var(--coral) ${((aiCount - 1) / 19) * 100}%, var(--dune) ${((aiCount - 1) / 19) * 100}%, var(--dune) 100%)`,
+                }}
+              />
+              <span className="font-display font-bold text-[28px] text-ink tabular-nums w-12 text-right">
+                {aiCount}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-smoke mb-6">
+              <span>1</span>
+              <span>20</span>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="cta-ghost" onClick={() => setAiModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="cta" onClick={runAIGeneration}>
+                Generate
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {aiStep === "loading" && (
+          <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <Spinner className="h-8 w-8" />
+            <p className="text-[14px] text-smoke">Drafting {aiCount} question{aiCount === 1 ? "" : "s"}…</p>
+          </div>
+        )}
+
+        {aiStep === "review" && (
+          <div>
+            <p className="text-[13px] text-smoke mb-4">
+              Toggle the ones you want to keep. {aiIncluded.size} of {aiGenerated.length} selected.
+            </p>
+            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1 -mr-1">
+              {aiGenerated.map((q, i) => {
+                const included = aiIncluded.has(i);
+                return (
+                  <div
+                    key={i}
+                    className={`rounded-2xl border-2 px-4 py-3 transition-colors ${
+                      included ? "border-ink bg-paper" : "border-dune bg-paper opacity-55"
+                    }`}
+                  >
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={included}
+                        onChange={(e) => {
+                          setAiIncluded((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(i);
+                            else next.delete(i);
+                            return next;
+                          });
+                        }}
+                        className="checkbox-rebrand mt-1"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-body font-bold text-[15px] text-ink leading-snug mb-2">
+                          {q.prompt}
+                        </p>
+                        <ul className="space-y-1 text-[13px]">
+                          {q.choices.map((c, ci) => {
+                            const letter = ["A", "B", "C", "D"][ci] || "";
+                            return (
+                              <li
+                                key={ci}
+                                className={`flex items-start gap-2 ${
+                                  c.isCorrect ? "text-ink font-semibold" : "text-smoke"
+                                }`}
+                              >
+                                <span
+                                  className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-display font-bold border shrink-0 mt-0.5 ${
+                                    c.isCorrect
+                                      ? "bg-teal-brand text-paper border-ink"
+                                      : "bg-paper text-smoke border-dune"
+                                  }`}
+                                >
+                                  {c.isCorrect ? "✓" : letter}
+                                </span>
+                                <span>{c.text}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-2 justify-end mt-5 pt-4 border-t border-dune">
+              <Button variant="cta-ghost" onClick={() => setAiModalOpen(false)} disabled={aiSaving}>
+                Discard all
+              </Button>
+              <Button
+                variant="cta"
+                onClick={saveAIQuestions}
+                loading={aiSaving}
+                disabled={aiIncluded.size === 0}
+              >
+                Add {aiIncluded.size} to game
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* ═══════ Delete Modal ═══════ */}
       <Modal
@@ -1148,14 +1660,14 @@ export default function GameDetailPage({
         onClose={() => setShowDeleteModal(false)}
         title="Delete Game"
       >
-        <p className="text-sm text-text-secondary mb-6">
-          Are you sure you want to delete <strong className="text-text-primary">&quot;{game.title}&quot;</strong>? This action cannot be undone and all questions will be permanently removed.
+        <p className="text-sm text-ink mb-6">
+          Are you sure you want to delete <strong className="text-ink">&quot;{game?.title ?? ""}&quot;</strong>? This action cannot be undone and all questions will be permanently removed.
         </p>
         <div className="flex gap-3 justify-end">
           <Button variant="ghost" onClick={() => setShowDeleteModal(false)}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={handleDeleteGame}>
+          <Button variant="cta-danger" onClick={handleDeleteGame}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
@@ -1163,6 +1675,129 @@ export default function GameDetailPage({
           </Button>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+// ============================================================
+// How-to-play tab content (trivia)
+// ============================================================
+
+function TriviaHowToPlay() {
+  const steps: { title: string; body: string }[] = [
+    {
+      title: "You host, they play",
+      body:
+        "Share the on-screen code and join link. Everyone joins from their phone. You drive the pace from the host remote.",
+    },
+    {
+      title: "A question appears",
+      body:
+        "Each round a multiple-choice question pops on the main display. Everyone sees the prompt and the four answer choices.",
+    },
+    {
+      title: "Players lock in an answer",
+      body:
+        "Players have until the timer runs out to pick a choice on their phone. Only the first answer counts — no take-backs.",
+    },
+    {
+      title: "Speed matters (if you want it to)",
+      body:
+        "With speed bonus on, faster correct answers score more. Turn it off for a calmer, purely-knowledge-based game.",
+    },
+    {
+      title: "Leaderboard and finale",
+      body:
+        "Scores update after every question. After the last one, the leaderboard crowns the winner. Rematch, swap games, or end the night from your host remote.",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
+      <div className="space-y-4 self-start" style={{ animationDelay: "0ms" }}>
+        <section className="card-rebrand p-6">
+          <div className="flex flex-col md:flex-row md:items-center gap-6">
+            <div className="flex-1 max-w-2xl">
+              <h2 className="font-display font-bold text-[28px] text-ink tracking-[-0.02em] leading-[1.05] mb-2">
+                How <span className="italic">Straight Off The Dome</span> plays
+              </h2>
+              <p className="text-[14px] text-smoke leading-relaxed">
+                Rapid-fire multiple-choice trivia. You pick the topic and difficulty, we generate the questions,
+                players race to answer first. 2–12 players works best.
+              </p>
+            </div>
+            <div className="flex gap-2 text-[12px] text-smoke shrink-0">
+              <span className="chip-rebrand chip-accent-violet">2–12 players</span>
+              <span className="chip-rebrand chip-accent-coral">~10 min</span>
+            </div>
+          </div>
+        </section>
+
+        {steps.map((step, i) => (
+          <article key={step.title} className="card-rebrand p-6 flex gap-5">
+            <span className="w-11 h-11 rounded-full border-2 border-ink flex items-center justify-center shrink-0 font-display font-bold text-[18px] text-ink bg-[color-mix(in_srgb,var(--sunflower)_40%,var(--paper))]">
+              {i + 1}
+            </span>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-display font-semibold text-[18px] text-ink tracking-[-0.01em] mb-1.5">
+                {step.title}
+              </h3>
+              <p className="text-[13px] text-smoke leading-relaxed">{step.body}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <aside className="self-start" style={{ animationDelay: "0ms" }}>
+        <section className="card-rebrand p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <span
+              className="w-9 h-9 rounded-full border-2 border-ink flex items-center justify-center shrink-0 bg-[color-mix(in_srgb,var(--sunflower)_40%,var(--paper))]"
+              aria-hidden
+            >
+              <svg className="w-4 h-4 text-ink" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </span>
+            <h3 className="font-display font-semibold text-[18px] text-ink tracking-[-0.01em]">
+              Host tips
+            </h3>
+          </div>
+          <ul className="space-y-3 text-[13px] text-smoke leading-relaxed">
+            <li className="flex gap-2">
+              <span className="text-ink font-semibold mt-0.5">•</span>
+              <span>10–15 questions is the sweet spot. Long rounds drag; short ones leave folks wanting more.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-ink font-semibold mt-0.5">•</span>
+              <span>Specific topics (&ldquo;90s sitcoms&rdquo;, &ldquo;F1 history&rdquo;) beat broad ones — players know when they&apos;re supposed to know.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-ink font-semibold mt-0.5">•</span>
+              <span>Speed bonus on = competitive. Off = forgiving. Read the room before starting.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-ink font-semibold mt-0.5">•</span>
+              <span>Review and tweak AI-generated questions before hosting — you know your crowd better than we do.</span>
+            </li>
+          </ul>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
+// ============================================================
+// Small reusable settings section header
+// ============================================================
+
+function SettingsHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <div>
+      <h3 className="font-display font-semibold text-[24px] text-ink tracking-[-0.02em] leading-[1.1] mb-1.5">
+        {title}
+      </h3>
+      <p className="text-[13px] text-smoke leading-relaxed">{description}</p>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { ButtonHTMLAttributes, forwardRef } from "react";
 
-type Variant = "primary" | "secondary" | "danger" | "ghost" | "success";
+type Variant = "primary" | "secondary" | "danger" | "ghost" | "success" | "cta" | "cta-ghost" | "cta-danger";
 type Size = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -20,6 +20,10 @@ const variantStyles: Record<Variant, string> = {
     "bg-transparent text-text-secondary hover:text-indigo-300 hover:bg-indigo-500/5",
   success:
     "btn-gradient-success active:scale-[0.98]",
+  // Rebrand — dashboard + login only
+  cta: "btn-cta",
+  "cta-ghost": "btn-cta-ghost",
+  "cta-danger": "btn-cta-danger",
 };
 
 const sizeStyles: Record<Size, string> = {

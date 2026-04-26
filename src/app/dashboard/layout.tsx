@@ -1,39 +1,19 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const NAV_ITEMS = [
-  {
-    label: "My Games",
-    href: "/dashboard",
-    iconSrc: "/my-games.svg",
-  },
-  {
-    label: "Game Library",
-    href: "/dashboard/library",
-    iconSrc: "/game-library.svg",
-  },
-  {
-    label: "Host Network",
-    href: "/dashboard/network",
-    iconSrc: "/host-network.svg",
-  },
-  {
-    label: "Help Center",
-    href: "/dashboard/help",
-    iconSrc: "/help-center.svg",
-  },
-  {
-    label: "My Account",
-    href: "/dashboard/account",
-    iconSrc: "/my-account.svg",
-    iconSize: 32,
-  },
+  { label: "My Games", href: "/dashboard", iconSrc: "/my-games.svg", color: "var(--coral)", iconSize: 36 },
+  { label: "Game Library", href: "/dashboard/library", iconSrc: "/game-library.svg", color: "var(--violet)", iconSize: 28 },
+  { label: "Host Network", href: "/dashboard/network", iconSrc: "/host-network.svg", color: "var(--magenta)", iconSize: 28 },
+  { label: "My Account", href: "/dashboard/account", iconSrc: "/my-account.svg", color: "var(--sunflower)", iconSize: 28 },
 ];
+
+// TODO: show refer-a-friend as a dismissible banner after a user
+// completes their first hosted game. Until that lands, no sidebar slot.
 
 export default function DashboardLayout({
   children,
@@ -42,7 +22,6 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -51,165 +30,111 @@ export default function DashboardLayout({
     router.refresh();
   }
 
-  const sidebarWidth = collapsed ? "w-[72px]" : "w-64";
-  const mainMargin = collapsed ? "ml-[72px]" : "ml-64";
-
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex rebrand">
       {/* Sidebar */}
-      <aside
-        className={`glass-sidebar ${sidebarWidth} fixed top-0 left-0 h-screen z-50 flex flex-col transition-all duration-300 ease-in-out ${collapsed ? "overflow-visible" : ""}`}
-      >
-        {/* Brand + Collapse toggle */}
-        <div className={`px-4 pt-5 pb-4 ${collapsed ? "flex flex-col items-center gap-3" : "flex items-center justify-between"}`}>
-          <Link href="/dashboard" className={`flex items-center min-w-0 ${collapsed ? "justify-center" : ""}`}>
-            {collapsed ? (
-              <Image
-                src="/logo-icon.png"
-                alt="HeyHost"
-                width={40}
-                height={40}
-                className="shrink-0"
-              />
-            ) : (
-              <Image
-                src="/logo.png"
-                alt="HeyHost"
-                width={180}
-                height={42}
-                className="shrink-0"
-                priority
-              />
-            )}
-          </Link>
-          <button
-            onClick={() => setCollapsed((c) => !c)}
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-secondary hover:bg-white/[0.05] transition-all shrink-0"
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <svg
-              className={`w-4 h-4 transition-transform duration-300 ${collapsed ? "rotate-180" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-          </button>
-        </div>
+      <aside className="sidebar-rebrand w-[104px] fixed top-0 left-0 h-screen z-50 flex flex-col">
+        {/* Brand mark */}
+        <Link
+          href="/dashboard"
+          className="flex flex-col items-center justify-center gap-1.5 pt-6 pb-5 shrink-0 border-b border-dune"
+        >
+          <Image
+            src="/logo-icon.png"
+            alt="HeyHost"
+            width={56}
+            height={56}
+            className="[filter:brightness(0)]"
+            priority
+          />
+          <span className="font-display font-bold text-[20px] tracking-[-0.03em] text-ink leading-none">
+            HeyHost
+          </span>
+        </Link>
 
-        {/* Create Game Button */}
-        <div className="px-3 mb-4">
-          {collapsed ? (
-            <Link
-              href="/dashboard/games/new"
-              className="btn-gradient-primary flex items-center justify-center w-full aspect-square rounded-xl group relative"
-              title="Create Game"
+        {/* Primary CTA */}
+        <div>
+          <Link
+            href="/dashboard/library"
+            title="Host a Game"
+            className="w-full flex flex-col items-center gap-1.5 group py-3 px-3 transition-colors duration-150 hover:bg-dune/40"
+          >
+            <span
+              className="w-12 h-12 rounded-full flex items-center justify-center border-2 border-ink transition-transform duration-200 group-hover:scale-110"
+              style={{ background: "var(--lime)" }}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="sidebar-tooltip">Create Game</span>
-            </Link>
-          ) : (
-            <Link
-              href="/dashboard/games/new"
-              className="btn-gradient-primary flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-full text-sm font-semibold"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Create Game
-            </Link>
-          )}
+              <Image
+                src="/host-game.svg"
+                alt="Host a Game"
+                width={28}
+                height={28}
+                className="nav-icon-light"
+              />
+            </span>
+            <span className="text-[11px] font-display font-semibold text-ink leading-[1.1] text-center">
+              Host a Game
+            </span>
+          </Link>
         </div>
 
         {/* Nav */}
-        <nav className={`flex-1 px-3 space-y-0.5 ${collapsed ? "overflow-visible" : "overflow-y-auto"}`}>
+        <nav className="flex-1 overflow-y-auto">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                title={collapsed ? item.label : undefined}
-                className={`group relative flex items-center gap-3 rounded-xl text-base font-medium transition-all duration-200 ${
-                  collapsed ? "justify-center px-0 py-3" : "px-3 py-2.5"
-                } ${
-                  isActive
-                    ? "bg-sidebar-active text-white font-bold"
-                    : "text-white/80 hover:text-white hover:bg-white/[0.06]"
+                className={`w-full flex flex-col items-center gap-1.5 group py-3 px-3 transition-colors duration-150 ${
+                  isActive ? "bg-dune" : "hover:bg-dune/40"
                 }`}
               >
-                <Image
-                  src={item.iconSrc}
-                  alt={item.label}
-                  width={item.iconSize || 36}
-                  height={item.iconSize || 36}
-                  className={`shrink-0 transition-all duration-200 ${
-                    isActive
-                      ? "sidebar-icon-active"
-                      : "sidebar-icon"
+                <span
+                  className="w-12 h-12 rounded-full flex items-center justify-center border-2 border-ink transition-transform duration-200 group-hover:scale-110"
+                  style={{
+                    background: item.color,
+                    boxShadow: isActive
+                      ? `0 0 0 2px var(--paper), 0 0 0 4px ${item.color}`
+                      : undefined,
+                  }}
+                >
+                  <Image
+                    src={item.iconSrc}
+                    alt={item.label}
+                    width={item.iconSize}
+                    height={item.iconSize}
+                    className="nav-icon-light"
+                  />
+                </span>
+                <span
+                  className={`text-[11px] font-display leading-[1.1] text-center text-ink ${
+                    isActive ? "font-bold" : "font-semibold"
                   }`}
-                />
-                {collapsed ? (
-                  <span className="sidebar-tooltip">{item.label}</span>
-                ) : (
-                  <span className="whitespace-nowrap">{item.label}</span>
-                )}
+                >
+                  {item.label}
+                </span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Gift Card — only when expanded */}
-        {!collapsed && (
-          <div className="px-4 pb-6 relative">
-            <Image
-              src="/present.png"
-              alt="Gift"
-              width={80}
-              height={80}
-              className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 drop-shadow-lg"
-            />
-            <div className="rounded-3xl p-4 pt-12 text-center" style={{ background: "#6b6bba" }}>
-              <div className="text-base font-bold uppercase tracking-wider text-white mb-1">
-                Give the Gift
-              </div>
-              <p className="text-sm text-white/90 leading-relaxed mb-3">
-                Invite a friend to join the fun and you&apos;ll both score a free month!
-              </p>
-              <button className="w-full text-sm font-semibold py-2 rounded-full text-white transition-all hover:opacity-90" style={{ background: "linear-gradient(310deg, #7928ca, #ff0080)" }}>
-                Refer
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Sign Out */}
-        <div className={collapsed ? "px-3 pb-5" : "px-4 pb-5"}>
+        {/* Logout — plain text link */}
+        <div className="px-3 pt-3 pb-5 border-t border-dune">
           <button
             onClick={handleSignOut}
-            title={collapsed ? "Logout" : undefined}
-            className={`group relative flex items-center justify-center gap-2 w-full rounded-full text-sm text-white font-semibold transition-all btn-gradient-logout ${
-              collapsed ? "py-3 px-0" : "px-3 py-2"
-            }`}
+            className="logout-link w-full flex flex-col items-center justify-center gap-1 py-2 text-[11px] leading-[1.1]"
           >
-            <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            {collapsed ? (
-              <span className="sidebar-tooltip">Logout</span>
-            ) : (
-              <span>Logout</span>
-            )}
+            Logout
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className={`${mainMargin} flex-1 min-h-screen transition-all duration-300 ease-in-out`}>
-        <div className="w-full px-16 py-14">
+      <main className="ml-[104px] flex-1 min-h-screen">
+        <div className="w-full px-12 pt-8 pb-16">
           {children}
         </div>
       </main>
