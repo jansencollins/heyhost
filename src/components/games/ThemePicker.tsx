@@ -191,7 +191,7 @@ export function ThemePicker({
       {/* Presets */}
       <div>
         <SectionLabel>Presets</SectionLabel>
-        <div className={`grid gap-1.5 ${compact ? "grid-cols-8" : "grid-cols-8 gap-2"}`}>
+        <div className={`grid gap-1.5 ${compact ? "grid-cols-6" : "grid-cols-6 gap-2"}`}>
           {THEME_PRESETS.map((preset) => {
             const selected = value.id === preset.id;
             return (

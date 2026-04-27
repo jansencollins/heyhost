@@ -4,18 +4,148 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToSession, unsubscribe } from "@/lib/realtime";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { AVATAR_COLORS } from "@/lib/avatar-colors";
 import { useGameTheme } from "@/lib/theme-context";
 import { getFontFamily, getGoogleFontsUrl } from "@/lib/theme-fonts";
+import { getPatternBg } from "@/lib/theme-patterns";
 import type {
   Session,
   SessionPlayer,
   SessionQuestionState,
   GameQuestionWithChoices,
+  GameTheme,
 } from "@/lib/types";
+
+// ─── Themed shell + helpers — mirrors TCHM's BankShell so every phase
+// fits the player frame without scroll. ────────────────────────────────
+function TriviaShell({ children, t }: { children: React.ReactNode; t: GameTheme }) {
+  const fontsUrl = getGoogleFontsUrl([t.headingFont, t.bodyFont]);
+  const headingFontCss = getFontFamily(t.headingFont);
+  const patternBg = getPatternBg(t.pattern, t.accent);
+  return (
+    <div
+      className="min-h-full h-full flex flex-col trivia-shell overflow-x-hidden"
+      style={{
+        backgroundColor: t.bg,
+        backgroundImage: patternBg ?? undefined,
+        backgroundRepeat: patternBg ? "repeat" : undefined,
+        color: t.textPrimary,
+        fontFamily: getFontFamily(t.bodyFont),
+      }}
+    >
+      {fontsUrl && <link rel="stylesheet" href={fontsUrl} />}
+      <style>{`
+        .trivia-shell h1,.trivia-shell h2,.trivia-shell h3{
+          font-family:${headingFontCss};
+          letter-spacing:-0.02em;
+          line-height:1.05;
+        }
+        .trivia-shell input::placeholder{color:${t.textDim}}
+      `}</style>
+      {children}
+    </div>
+  );
+}
+
+function TriviaCard({
+  children,
+  className = "",
+  glow = false,
+  t,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  glow?: boolean;
+  t: GameTheme;
+}) {
+  return (
+    <div
+      className={`rounded-3xl p-4 overflow-hidden ${className}`}
+      style={{
+        background: t.surface,
+        border: `1.5px solid color-mix(in srgb, ${t.textPrimary} 18%, transparent)`,
+        boxShadow: glow
+          ? `0 0 30px ${t.accentDim}`
+          : `0 8px 24px -16px rgba(0,0,0,0.45)`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function TriviaButton({
+  children,
+  onClick,
+  disabled = false,
+  loading = false,
+  variant = "primary",
+  className = "",
+  t,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  variant?: "primary" | "ghost";
+  className?: string;
+  t: GameTheme;
+}) {
+  const base =
+    "w-full py-3.5 rounded-full font-display font-semibold text-[16px] tracking-[-0.01em] transition-[filter,transform,background] duration-200 flex items-center justify-center gap-2 active:scale-[0.98] hover:brightness-95";
+  const buttonTextColor = t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A";
+  const inkBorder = `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`;
+  const variantStyles: Record<string, React.CSSProperties> = {
+    primary: { background: t.accent, color: buttonTextColor, border: inkBorder },
+    ghost: {
+      background: "transparent",
+      border: `1.5px solid color-mix(in srgb, ${t.textPrimary} 25%, transparent)`,
+      color: t.textPrimary,
+    },
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || loading}
+      className={`${base} disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+      style={variantStyles[variant]}
+    >
+      {loading && (
+        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      )}
+      {children}
+    </button>
+  );
+}
+
+function PulsingDot({ t }: { t: GameTheme }) {
+  return (
+    <span className="relative flex h-3 w-3">
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: t.accent }} />
+      <span className="relative inline-flex rounded-full h-3 w-3" style={{ background: t.accent }} />
+    </span>
+  );
+}
+
+function AvatarBubble({ player, size = 64 }: { player: SessionPlayer; size?: number }) {
+  return (
+    <div
+      className="rounded-full flex items-center justify-center text-white font-bold shrink-0"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: player.avatar_color,
+        fontSize: size * 0.4,
+        border: "2px solid color-mix(in srgb, currentColor 20%, transparent)",
+      }}
+    >
+      {player.display_name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
 
 type PlayerPhase =
   | "loading"
@@ -311,183 +441,414 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
     [session, player, questionState, currentQuestion, selectedChoiceId]
   );
 
-  const fontsUrl = getGoogleFontsUrl([t.headingFont, t.bodyFont]);
-  const headingCss = getFontFamily(t.headingFont);
-  const bodyFontStyle = getFontFamily(t.bodyFont);
   const buttonTextColor = t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A";
-  const fontElements = (
-    <>
-      {fontsUrl && <link rel="stylesheet" href={fontsUrl} />}
-      <style>{`.trivia-shell h1,.trivia-shell h2,.trivia-shell h3{font-family:${headingCss}}`}</style>
-    </>
-  );
 
   if (phase === "error") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 trivia-shell" style={{ background: t.bg, color: t.textPrimary, fontFamily: bodyFontStyle }}>{fontElements}
-        <div className="text-center">
-          <p className="text-lg mb-4" style={{ color: t.danger }}>{error}</p>
-          <Link href="/play"><Button>Try Again</Button></Link>
+      <TriviaShell t={t}>
+        <div className="flex-1 flex flex-col items-center justify-center px-5">
+          <div
+            className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+            style={{ background: "rgba(185,28,28,0.12)" }}
+          >
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke={t.danger} strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <p className="text-lg font-semibold mb-2">Oops!</p>
+          <p className="text-sm text-center mb-8" style={{ color: t.textMuted }}>{error}</p>
+          <Link href="/play" className="w-full max-w-xs">
+            <TriviaButton t={t}>Try Again</TriviaButton>
+          </Link>
         </div>
-      </div>
+      </TriviaShell>
     );
   }
 
   if (phase === "removed") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 trivia-shell" style={{ background: t.bg, color: t.textPrimary, fontFamily: bodyFontStyle }}>{fontElements}
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">You were removed</h2>
-          <p className="mb-6" style={{ color: t.textMuted }}>The host removed you from the game.</p>
-          <Link href="/play"><Button>Join Another Game</Button></Link>
+      <TriviaShell t={t}>
+        <div className="flex-1 flex flex-col items-center justify-center px-5">
+          <div
+            className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+            style={{ background: "rgba(185,28,28,0.12)" }}
+          >
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke={t.danger} strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+          </div>
+          <p className="text-xl font-bold mb-2">You were removed</p>
+          <p className="text-sm text-center mb-8" style={{ color: t.textMuted }}>
+            The host removed you from this session.
+          </p>
+          <Link href="/play" className="w-full max-w-xs">
+            <TriviaButton t={t}>Join Another Game</TriviaButton>
+          </Link>
         </div>
-      </div>
+      </TriviaShell>
     );
   }
 
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center trivia-shell" style={{ background: t.bg, fontFamily: bodyFontStyle }}>{fontElements}
-        <Spinner />
-      </div>
+      <TriviaShell t={t}>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <div className="w-10 h-10 border-3 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
+          <p className="text-sm" style={{ color: t.textMuted }}>Connecting…</p>
+        </div>
+      </TriviaShell>
     );
   }
 
   if (phase === "joining") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 trivia-shell" style={{ background: t.bg, color: t.textPrimary, fontFamily: bodyFontStyle }}>{fontElements}
-        <h1 className="text-2xl font-bold mb-8" style={{ color: t.accent }}>HeyHost</h1>
-        <div className="w-full max-w-sm space-y-6">
-          <div className="text-center">
-            <span className="text-sm" style={{ color: t.textMuted }}>Game Code</span>
-            <p className="text-3xl font-bold font-mono tracking-widest">{sessionCode}</p>
-          </div>
-          <Input label="Your Name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Enter your name" maxLength={20} autoFocus />
-          <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: t.textMuted }}>Pick a Color</label>
-            <div className="flex flex-wrap gap-2">
-              {AVATAR_COLORS.map((color) => (
-                <button key={color} onClick={() => setAvatarColor(color)}
-                  className={`w-10 h-10 rounded-full transition-transform ${avatarColor === color ? "scale-110" : "hover:scale-105"}`}
-                  style={{
-                    backgroundColor: color,
-                    ...(avatarColor === color ? { boxShadow: `0 0 0 2px ${t.bg}, 0 0 0 4px ${t.accent}` } : {}),
-                  }} />
-              ))}
+      <TriviaShell t={t}>
+        <div className="flex-1 flex flex-col justify-center px-4 py-3">
+          {/* Game Code chip */}
+          <div className="relative mb-3">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+              <div
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full"
+                style={{ background: t.bg, border: `1px solid ${t.accent}` }}
+              >
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke={t.accent} strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                <span className="font-mono font-bold text-xs tracking-[0.15em]" style={{ color: t.accent }}>
+                  {sessionCode}
+                </span>
+              </div>
+            </div>
+            <div
+              className="rounded-2xl overflow-hidden pt-4 pb-3 px-4 text-center"
+              style={{ border: `1px solid color-mix(in srgb, ${t.textPrimary} 18%, transparent)`, background: t.surface }}
+            >
+              <h1 className="text-xl font-bold mb-1">Straight Off The Dome</h1>
+              <p className="text-[12px]" style={{ color: t.textMuted }}>Trivia, no warm-up.</p>
             </div>
           </div>
-          {error && <p className="text-sm" style={{ color: t.danger }}>{error}</p>}
-          <button
-            onClick={handleJoin}
-            disabled={joinLoading}
-            className="w-full py-3.5 rounded-2xl font-bold text-base transition-all active:scale-[0.97] disabled:opacity-40"
-            style={{ background: t.accent, color: buttonTextColor }}
-          >
-            {joinLoading ? "Joining..." : "Join Game"}
-          </button>
+
+          {/* Name Input */}
+          <TriviaCard t={t} className="!p-3 mb-3">
+            <label className="block text-[10px] font-medium mb-1 uppercase tracking-wider text-center" style={{ color: t.textDim }}>
+              Player Name
+            </label>
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Enter your name"
+              maxLength={20}
+              autoFocus
+              className="w-full bg-transparent text-lg font-bold text-center focus:outline-none"
+              style={{ color: t.textPrimary, caretColor: t.accent }}
+            />
+          </TriviaCard>
+
+          {/* Color picker */}
+          <div className="flex flex-col mb-3">
+            <h2 className="text-sm font-bold text-center mb-2">Pick a Color</h2>
+            <div className="grid grid-cols-8 gap-1.5">
+              {AVATAR_COLORS.map((color) => {
+                const selected = avatarColor === color;
+                return (
+                  <button
+                    key={color}
+                    onClick={() => setAvatarColor(color)}
+                    className="aspect-square rounded-full transition-all relative"
+                    style={{
+                      backgroundColor: color,
+                      border: selected
+                        ? `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`
+                        : "2px solid transparent",
+                      boxShadow: selected ? `0 0 0 2px ${t.bg}, 0 0 0 4px ${t.accent}` : "none",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-xs text-center font-medium mb-2" style={{ color: t.danger }}>
+              {error}
+            </p>
+          )}
+
+          <TriviaButton t={t} onClick={handleJoin} loading={joinLoading}>
+            Join Game
+          </TriviaButton>
         </div>
-      </div>
+      </TriviaShell>
     );
   }
 
   if (phase === "lobby" || (session.status === "lobby" && player)) {
+    const others = players.filter((p) => p.id !== player?.id);
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 trivia-shell" style={{ background: t.bg, color: t.textPrimary, fontFamily: bodyFontStyle }}>{fontElements}
-        <h1 className="text-xl font-bold mb-2" style={{ color: t.accent }}>HeyHost</h1>
-        <p className="text-sm mb-8" style={{ color: t.textMuted }}>Waiting for the host to start...</p>
-        <div className="w-20 h-20 rounded-full mb-4 flex items-center justify-center text-white text-2xl font-bold" style={{ backgroundColor: player?.avatar_color }}>
-          {player?.display_name.charAt(0).toUpperCase()}
-        </div>
-        <p className="text-lg font-semibold mb-8">{player?.display_name}</p>
-        <div className="text-center">
-          <p className="text-sm mb-2" style={{ color: t.textMuted }}>Players ({players.length})</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {players.map((p) => (
-              <div key={p.id} className="px-3 py-1 rounded-full text-sm text-white font-medium" style={{ backgroundColor: p.avatar_color }}>{p.display_name}</div>
-            ))}
+      <TriviaShell t={t}>
+        {/* Greeting Header */}
+        <div className="px-5 pt-6 pb-4 flex items-center justify-between">
+          <div className="min-w-0">
+            <p className="text-sm" style={{ color: t.textMuted }}>Welcome!</p>
+            <h1 className="text-2xl font-bold truncate">{player?.display_name}</h1>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <PulsingDot t={t} />
+            <span className="text-xs font-medium" style={{ color: t.accent }}>LIVE</span>
           </div>
         </div>
-        <div className="mt-8">
-          <div className="w-8 h-8 border-3 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
+
+        <div className="flex-1 px-5 pb-5 flex flex-col gap-4 overflow-y-auto">
+          {/* Player card */}
+          {player && (
+            <TriviaCard t={t} glow className="flex items-center gap-4">
+              <AvatarBubble player={player} size={64} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: t.textDim }}>
+                  Game Code
+                </p>
+                <p className="text-2xl font-bold font-mono tracking-[0.15em]" style={{ color: t.accent }}>
+                  {sessionCode}
+                </p>
+              </div>
+            </TriviaCard>
+          )}
+
+          {/* Player list */}
+          <div>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-sm font-bold">Players</h3>
+              <span className="text-xs font-medium" style={{ color: t.textMuted }}>
+                {players.length} {players.length === 1 ? "player" : "players"}
+              </span>
+            </div>
+            <TriviaCard t={t} className="!p-2.5">
+              <div className="flex flex-wrap gap-1.5">
+                {others.map((p) => (
+                  <span
+                    key={p.id}
+                    className="px-2.5 py-1 rounded-full text-xs font-semibold text-white"
+                    style={{ backgroundColor: p.avatar_color }}
+                  >
+                    {p.display_name}
+                  </span>
+                ))}
+                {others.length === 0 && (
+                  <p className="text-xs py-1" style={{ color: t.textDim }}>
+                    No other players yet…
+                  </p>
+                )}
+              </div>
+            </TriviaCard>
+          </div>
+
+          {/* Waiting Indicator */}
+          <div
+            className="flex items-center justify-center gap-3 py-3 rounded-2xl mt-auto shrink-0"
+            style={{ background: t.accentDim }}
+          >
+            <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
+            <span className="text-sm font-medium" style={{ color: t.accent }}>
+              Waiting for the host to start…
+            </span>
+          </div>
         </div>
-      </div>
+      </TriviaShell>
     );
   }
 
   if ((phase === "question" || phase === "answered") && currentQuestion && questionState) {
+    const choices = currentQuestion.game_question_choices;
+    const choiceColors = ["#EF4444", "#3B82F6", "#F59E0B", "#10B981", "#8B5CF6"];
+    const choiceLetters = ["A", "B", "C", "D", "E"];
+    const isLocked = questionState.is_locked || questionState.is_paused || !!selectedChoiceId;
     return (
-      <div className="min-h-screen flex flex-col trivia-shell" style={{ background: t.bg, color: t.textPrimary, fontFamily: bodyFontStyle }}>{fontElements}
-        <div className="p-4 flex items-center justify-between">
-          <span className="text-sm" style={{ color: t.textMuted }}>Q{questionState.question_index + 1}</span>
-          <span className="text-2xl font-bold font-mono" style={{ color: timeLeft <= 5 ? t.danger : t.textPrimary }}>
-            {questionState.is_paused ? "PAUSED" : timeLeft}
-          </span>
+      <TriviaShell t={t}>
+        {/* Top bar */}
+        <div className="px-5 pt-5 pb-3 flex items-center justify-between shrink-0">
+          <div
+            className="px-3 py-1 rounded-lg text-sm font-bold"
+            style={{ background: t.accentDim, color: t.accent }}
+          >
+            Question {questionState.question_index + 1}
+          </div>
+          <div
+            className="text-2xl font-bold tabular-nums"
+            style={{ color: timeLeft <= 5 ? t.danger : t.textPrimary, fontFamily: getFontFamily(t.headingFont) }}
+          >
+            {questionState.is_paused ? "PAUSED" : `${timeLeft}s`}
+          </div>
         </div>
-        <div className="px-4 pb-4">
-          <p className="text-lg font-semibold text-center">{currentQuestion.prompt}</p>
-        </div>
-        <div className="flex-1 flex flex-col justify-end p-4 space-y-3">
-          {phase === "answered" && answerResult ? (
-            <div className="text-center py-8">
-              <div className="text-6xl mb-4" style={{ color: answerResult.correct ? "#22c55e" : t.danger }}>
-                {answerResult.correct ? "Correct!" : "Wrong"}
-              </div>
-              {answerResult.points > 0 && <p className="text-2xl font-bold">+{answerResult.points} pts</p>}
-            </div>
-          ) : (
-            currentQuestion.game_question_choices.map((choice, idx) => {
-              const colors = ["bg-red-500", "bg-blue-500", "bg-amber-500", "bg-green-500", "bg-violet-500"];
+
+        <div className="flex-1 min-h-0 px-4 pb-4 flex flex-col gap-3">
+          {/* Prompt */}
+          <TriviaCard t={t} glow className="text-center !p-4 shrink-0">
+            <p className="text-lg font-bold leading-tight">{currentQuestion.prompt}</p>
+          </TriviaCard>
+
+          {/* Choices fill remaining space */}
+          <div className="flex-1 min-h-0 flex flex-col gap-2.5">
+            {choices.map((choice, idx) => {
+              const color = choiceColors[idx] || t.accent;
+              const isMe = selectedChoiceId === choice.id;
               return (
-                <button key={choice.id} onClick={() => handleAnswer(choice.id)}
-                  disabled={questionState.is_locked || questionState.is_paused || !!selectedChoiceId}
-                  className={`w-full py-4 px-6 rounded-xl text-white font-semibold text-lg transition-all disabled:opacity-60 ${colors[idx]} hover:opacity-90 active:scale-[0.98]`}>
-                  {choice.choice_text}
+                <button
+                  key={choice.id}
+                  onClick={() => handleAnswer(choice.id)}
+                  disabled={isLocked}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-white font-semibold text-base transition-all disabled:opacity-60 active:scale-[0.98] hover:brightness-95 flex-1 min-h-0"
+                  style={{
+                    background: color,
+                    border: `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`,
+                    boxShadow: isMe ? `0 0 0 3px ${t.accent}` : "none",
+                  }}
+                >
+                  <span
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                    style={{ background: "rgba(255,255,255,0.25)", border: "1.5px solid rgba(255,255,255,0.5)" }}
+                  >
+                    {choiceLetters[idx]}
+                  </span>
+                  <span className="flex-1 text-left">{choice.choice_text}</span>
+                  {isMe && (
+                    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
                 </button>
               );
-            })
+            })}
+          </div>
+
+          {phase === "answered" && (
+            <div
+              className="flex items-center justify-center gap-2 py-2 rounded-full shrink-0"
+              style={{ background: t.accentDim }}
+            >
+              <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
+              <span className="text-xs font-medium" style={{ color: t.accent }}>
+                Locked in — waiting for reveal…
+              </span>
+            </div>
           )}
         </div>
-      </div>
+      </TriviaShell>
     );
   }
 
   if (phase === "results" && questionState && currentQuestion) {
     const correctChoice = currentQuestion.game_question_choices.find((c) => c.is_correct);
+    const correctColor = "#15803D";
+    const isCorrect = answerResult?.correct;
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 trivia-shell" style={{ background: t.bg, color: t.textPrimary, fontFamily: bodyFontStyle }}>{fontElements}
-        <h2 className="text-xl font-bold mb-4">Results</h2>
-        <p className="text-sm mb-2" style={{ color: t.textMuted }}>Correct answer:</p>
-        <p className="text-lg font-semibold mb-6" style={{ color: "#22c55e" }}>{correctChoice?.choice_text}</p>
-        {answerResult && (
-          <div className="text-2xl font-bold" style={{ color: answerResult.correct ? "#22c55e" : t.danger }}>
-            {answerResult.correct ? `+${answerResult.points} pts` : "No points"}
+      <TriviaShell t={t}>
+        <div className="flex-1 px-5 py-6 flex flex-col items-center justify-center gap-4">
+          <TriviaCard t={t} glow className="w-full text-center">
+            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: t.textDim }}>
+              Correct Answer
+            </p>
+            <p
+              className="text-3xl font-bold tracking-[-0.025em]"
+              style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
+            >
+              {correctChoice?.choice_text}
+            </p>
+          </TriviaCard>
+
+          {answerResult && (
+            <TriviaCard t={t} className="w-full">
+              <div className="flex items-center justify-between">
+                <span className="text-xs uppercase tracking-wider" style={{ color: t.textDim }}>
+                  Your Result
+                </span>
+                <span
+                  className="text-lg font-bold"
+                  style={{ color: isCorrect ? correctColor : t.danger }}
+                >
+                  {isCorrect ? "Correct!" : "Wrong"}
+                </span>
+              </div>
+              {answerResult.points > 0 && (
+                <div
+                  className="rounded-xl mt-3 py-3 text-center"
+                  style={{ background: t.surfaceLight }}
+                >
+                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: t.textDim }}>Points Earned</p>
+                  <p
+                    className="text-2xl font-bold tabular-nums"
+                    style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
+                  >
+                    +{answerResult.points}
+                  </p>
+                </div>
+              )}
+            </TriviaCard>
+          )}
+
+          <div
+            className="flex items-center gap-2 px-4 py-2 rounded-full"
+            style={{ background: t.accentDim }}
+          >
+            <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
+            <span className="text-xs font-medium" style={{ color: t.accent }}>Waiting for next question…</span>
           </div>
-        )}
-        <p className="text-sm mt-6" style={{ color: t.textDim }}>Waiting for host...</p>
-      </div>
+        </div>
+      </TriviaShell>
     );
   }
 
   if (phase === "leaderboard") {
     const sorted = [...players].sort((a, b) => b.score - a.score);
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 trivia-shell" style={{ background: t.bg, color: t.textPrimary, fontFamily: bodyFontStyle }}>{fontElements}
-        <h2 className="text-2xl font-bold mb-6">Leaderboard</h2>
-        <div className="w-full max-w-sm space-y-2">
-          {sorted.slice(0, 10).map((p, i) => (
-            <div key={p.id} className="flex items-center gap-3 px-4 py-2 rounded-lg"
-              style={{ background: p.id === player?.id ? t.accentDim : t.surface }}>
-              <span className="text-lg font-bold w-8" style={{ color: t.textDim }}>#{i + 1}</span>
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: p.avatar_color }}>
-                {p.display_name.charAt(0).toUpperCase()}
-              </div>
-              <span className="flex-1 font-medium">{p.display_name}</span>
-              <span className="font-mono font-bold" style={{ color: t.accent }}>{p.score}</span>
-            </div>
-          ))}
+      <TriviaShell t={t}>
+        <div className="px-5 pt-6 pb-3 text-center shrink-0">
+          <h1 className="text-[28px] font-bold tracking-[-0.025em] leading-[1.05]">Leaderboard</h1>
+          <p className="text-[14px] mt-1.5" style={{ color: t.textMuted }}>Standings so far</p>
         </div>
-        <p className="text-sm mt-6" style={{ color: t.textDim }}>Waiting for next question...</p>
-      </div>
+
+        <div className="flex-1 px-5 pb-5 flex flex-col gap-3 overflow-y-auto min-h-0">
+          <TriviaCard t={t} className="!p-2">
+            <div>
+              {sorted.slice(0, 10).map((p, i) => {
+                const isMe = p.id === player?.id;
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-3 px-3 py-2.5"
+                    style={{
+                      background: isMe ? t.accentDim : "transparent",
+                      borderTop: i === 0 ? "none" : `1px solid color-mix(in srgb, ${t.textPrimary} 6%, transparent)`,
+                      borderRadius: i === 0 ? "0.75rem 0.75rem 0 0" : i === Math.min(sorted.length, 10) - 1 ? "0 0 0.75rem 0.75rem" : "0",
+                    }}
+                  >
+                    <span className="text-sm font-bold w-7 text-center" style={{ color: t.textDim }}>
+                      #{i + 1}
+                    </span>
+                    <AvatarBubble player={p} size={36} />
+                    <span className="flex-1 font-display font-semibold text-[14px] truncate">
+                      {p.display_name}{isMe ? " · You" : ""}
+                    </span>
+                    <span
+                      className="font-display font-bold text-[15px] tabular-nums"
+                      style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
+                    >
+                      {p.score}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </TriviaCard>
+
+          <div
+            className="flex items-center justify-center gap-2 py-2 rounded-full mt-auto shrink-0"
+            style={{ background: t.accentDim }}
+          >
+            <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
+            <span className="text-xs font-medium" style={{ color: t.accent }}>Waiting for next question…</span>
+          </div>
+        </div>
+      </TriviaShell>
     );
   }
 
@@ -495,39 +856,88 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
     const sorted = [...players].sort((a, b) => b.score - a.score);
     const myRank = sorted.findIndex((p) => p.id === player?.id) + 1;
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 trivia-shell" style={{ background: t.bg, color: t.textPrimary, fontFamily: bodyFontStyle }}>{fontElements}
-        <h1 className="text-3xl font-bold mb-2">Game Over!</h1>
-        {player && (
-          <div className="text-center mb-8">
-            <p className="text-lg" style={{ color: t.textMuted }}>You placed <span className="font-bold" style={{ color: t.accent }}>#{myRank}</span></p>
-            <p className="text-3xl font-bold">{player.score} pts</p>
-          </div>
-        )}
-        <div className="w-full max-w-sm space-y-2">
-          {sorted.slice(0, 10).map((p, i) => (
-            <div key={p.id} className="flex items-center gap-3 px-4 py-2 rounded-lg"
-              style={{ background: p.id === player?.id ? t.accentDim : t.surface }}>
-              <span className="text-lg font-bold w-8" style={{ color: t.textDim }}>#{i + 1}</span>
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: p.avatar_color }}>
-                {p.display_name.charAt(0).toUpperCase()}
-              </div>
-              <span className="flex-1 font-medium">{p.display_name}</span>
-              <span className="font-mono font-bold" style={{ color: t.accent }}>{p.score}</span>
-            </div>
-          ))}
+      <TriviaShell t={t}>
+        <div className="px-5 pt-6 pb-3 text-center shrink-0">
+          <h1 className="text-[28px] font-bold tracking-[-0.025em] leading-[1.05]">Game Over</h1>
+          <p className="text-[14px] mt-1.5" style={{ color: t.textMuted }}>Final standings</p>
         </div>
-        <Link href="/play" className="mt-8">
-          <button className="px-8 py-3 rounded-2xl font-bold transition-all active:scale-[0.97]" style={{ background: t.accent, color: buttonTextColor }}>
-            Play Again
-          </button>
-        </Link>
-      </div>
+
+        <div className="flex-1 px-5 pb-5 flex flex-col gap-3 overflow-y-auto min-h-0">
+          {player && (
+            <TriviaCard t={t} glow className="text-center py-5">
+              <AvatarBubble player={player} size={72} />
+              <p className="text-sm mt-3 mb-1" style={{ color: t.textMuted }}>{player.display_name}</p>
+              <p
+                className="text-4xl font-bold tracking-[-0.025em] tabular-nums"
+                style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
+              >
+                {player.score}
+                <span
+                  className="text-lg font-normal ml-1 tracking-normal"
+                  style={{ color: t.textMuted, fontFamily: getFontFamily(t.bodyFont) }}
+                >
+                  pts
+                </span>
+              </p>
+              <div
+                className="inline-flex items-center gap-1.5 mt-3 px-4 py-1.5 rounded-full text-sm font-bold"
+                style={{ background: t.accentDim, color: t.accent }}
+              >
+                Rank #{myRank}
+              </div>
+            </TriviaCard>
+          )}
+
+          <div className="shrink-0">
+            <h3 className="text-sm font-bold mb-2 px-1">Final Standings</h3>
+            <TriviaCard t={t} className="!p-2">
+              <div>
+                {sorted.slice(0, 10).map((p, i) => {
+                  const isMe = p.id === player?.id;
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center gap-3 px-3 py-2.5"
+                      style={{
+                        background: isMe ? t.accentDim : "transparent",
+                        borderTop: i === 0 ? "none" : `1px solid color-mix(in srgb, ${t.textPrimary} 6%, transparent)`,
+                        borderRadius: i === 0 ? "0.75rem 0.75rem 0 0" : i === Math.min(sorted.length, 10) - 1 ? "0 0 0.75rem 0.75rem" : "0",
+                      }}
+                    >
+                      <span className="text-sm font-bold w-7 text-center" style={{ color: t.textDim }}>
+                        #{i + 1}
+                      </span>
+                      <AvatarBubble player={p} size={32} />
+                      <span className="flex-1 font-display font-semibold text-[13px] truncate">
+                        {p.display_name}{isMe ? " · You" : ""}
+                      </span>
+                      <span
+                        className="font-display font-bold text-[14px] tabular-nums"
+                        style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
+                      >
+                        {p.score}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </TriviaCard>
+          </div>
+
+          <Link href="/play" className="mt-auto shrink-0">
+            <TriviaButton t={t}>Play Again</TriviaButton>
+          </Link>
+        </div>
+      </TriviaShell>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center trivia-shell" style={{ background: t.bg, fontFamily: bodyFontStyle }}>{fontElements}
-      <Spinner />
-    </div>
+    <TriviaShell t={t}>
+      <div className="flex-1 flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 border-3 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
+        <p className="text-sm" style={{ color: t.textMuted }}>Loading…</p>
+      </div>
+    </TriviaShell>
   );
 }

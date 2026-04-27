@@ -10,6 +10,7 @@ import { WheelOfPain } from "@/components/pir/WheelOfPain";
 import { PlayerCardIcon } from "@/components/pir/PlayerCardIcon";
 import { useGameTheme } from "@/lib/theme-context";
 import { getFontFamily, getGoogleFontsUrl } from "@/lib/theme-fonts";
+import { getPatternBg } from "@/lib/theme-patterns";
 import {
   formatPrice,
   isInPenaltyZone,
@@ -36,10 +37,17 @@ export interface PIRScreenDevMode {
 function ScreenShell({ children, t }: { children: React.ReactNode; t: GameTheme }) {
   const fontsUrl = getGoogleFontsUrl([t.headingFont, t.bodyFont]);
   const headingFontCss = getFontFamily(t.headingFont);
+  const patternBg = getPatternBg(t.pattern, t.accent);
   return (
     <div
       className="h-full flex flex-col overflow-hidden themed-screen"
-      style={{ background: t.bg, color: t.textPrimary, fontFamily: getFontFamily(t.bodyFont) }}
+      style={{
+        backgroundColor: t.bg,
+        backgroundImage: patternBg ?? undefined,
+        backgroundRepeat: patternBg ? "repeat" : undefined,
+        color: t.textPrimary,
+        fontFamily: getFontFamily(t.bodyFont),
+      }}
     >
       {fontsUrl && (
         // eslint-disable-next-line @next/next/no-page-custom-font

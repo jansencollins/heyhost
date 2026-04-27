@@ -29,6 +29,20 @@ export type ThemeFont =
   | "Oswald"
   | "Playfair Display";
 
+export type ThemePattern =
+  | "confetti"
+  | "hearts"
+  | "shamrocks"
+  | "eggs"
+  | "stars"
+  | "bats"
+  | "leaves"
+  | "snowflakes"
+  | "graduation-caps"
+  | "rings"
+  | "dots"
+  | "balloons";
+
 export interface GameTheme {
   id: string;
   name: string;
@@ -46,6 +60,8 @@ export interface GameTheme {
   bodyFont: ThemeFont;
   bodyTextMode: "light" | "dark";
   buttonTextMode: "light" | "dark";
+  /** Optional repeating background pattern that tints with accent. */
+  pattern?: ThemePattern | null;
 }
 
 export interface Game {

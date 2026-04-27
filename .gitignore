@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+/design-prompts
+/supabase
 
 # debug
 npm-debug.log*

@@ -1,4 +1,4 @@
-import type { GameTheme, GameType, ThemeFont } from "./types";
+import type { GameTheme, GameType, ThemeFont, ThemePattern } from "./types";
 
 /** All available fonts for the theme picker */
 export const THEME_FONTS: { value: ThemeFont; label: string; category: "sans" | "serif" | "display" }[] = [
@@ -51,6 +51,7 @@ export function buildTheme(opts: {
   bodyFont: ThemeFont;
   bodyTextMode: "light" | "dark";
   buttonTextMode: "light" | "dark";
+  pattern?: ThemePattern | null;
 }): GameTheme {
   const { r, g, b } = hexToRgb(opts.accent);
   const isLightBody = opts.bodyTextMode === "light";
@@ -72,167 +73,145 @@ export function buildTheme(opts: {
     bodyFont: opts.bodyFont,
     bodyTextMode: opts.bodyTextMode,
     buttonTextMode: opts.buttonTextMode,
+    pattern: opts.pattern ?? null,
   };
 }
 
 /**
- * Light theme presets — matched to the dashboard palette.
- * Cream paper bg + ink text, with one accent color per preset.
- * Bright accents (sunflower, lime) get dark button text for contrast;
- * the rest use white button text.
+ * Generic solid-color theme presets — a versatile set of bg/accent pairings
+ * that work across game types. Mix of clean light surfaces, mid-tones, and
+ * moodier dark backgrounds. All built via buildTheme() so the derived
+ * surface/border/text tokens stay consistent.
  */
 export const THEME_PRESETS: GameTheme[] = [
-  {
-    id: "cream-coral",
-    name: "Cream Coral",
-    bg: "#F4EDE0",
-    surface: "#FBF6EC",
-    surfaceLight: "#FFFDF6",
-    accent: "#FF5B3B",
-    accentDim: "rgba(255,91,59,0.14)",
-    textPrimary: "#1A1412",
-    textMuted: "#6B625A",
-    textDim: "#9C9388",
-    border: "rgba(255,91,59,0.22)",
-    danger: "#B91C1C",
+  // Light backgrounds
+  buildTheme({
+    id: "snow-indigo",
+    name: "Snow Indigo",
+    bg: "#FAFAFA",
+    accent: "#4F46E5",
+    headingFont: "Inter",
+    bodyFont: "Inter",
+    bodyTextMode: "dark",
+    buttonTextMode: "light",
+  }),
+  buildTheme({
+    id: "linen-coral",
+    name: "Linen Coral",
+    bg: "#F5EFE6",
+    accent: "#F97350",
     headingFont: "Montserrat",
     bodyFont: "DM Sans",
     bodyTextMode: "dark",
     buttonTextMode: "light",
-  },
-  {
-    id: "cream-lime",
-    name: "Cream Lime",
-    bg: "#F4EDE0",
-    surface: "#FBF6EC",
-    surfaceLight: "#FFFDF6",
+  }),
+  buildTheme({
+    id: "mint-forest",
+    name: "Mint Forest",
+    bg: "#E8F5EE",
+    accent: "#15803D",
+    headingFont: "Sora",
+    bodyFont: "DM Sans",
+    bodyTextMode: "dark",
+    buttonTextMode: "light",
+  }),
+  buildTheme({
+    id: "sky-plum",
+    name: "Sky Plum",
+    bg: "#EEF4FB",
+    accent: "#7E22CE",
+    headingFont: "Outfit",
+    bodyFont: "Inter",
+    bodyTextMode: "dark",
+    buttonTextMode: "light",
+  }),
+  buildTheme({
+    id: "rose-crimson",
+    name: "Rose Crimson",
+    bg: "#FBEEF0",
+    accent: "#DC2626",
+    headingFont: "Playfair Display",
+    bodyFont: "DM Sans",
+    bodyTextMode: "dark",
+    buttonTextMode: "light",
+  }),
+  buildTheme({
+    id: "butter-amber",
+    name: "Butter Amber",
+    bg: "#FBF4D8",
+    accent: "#B45309",
+    headingFont: "Raleway",
+    bodyFont: "Nunito",
+    bodyTextMode: "dark",
+    buttonTextMode: "light",
+  }),
+  // Dark backgrounds
+  buildTheme({
+    id: "onyx-lime",
+    name: "Onyx Lime",
+    bg: "#0F0F12",
     accent: "#A3E635",
-    accentDim: "rgba(163,230,53,0.20)",
-    textPrimary: "#1A1412",
-    textMuted: "#6B625A",
-    textDim: "#9C9388",
-    border: "rgba(163,230,53,0.30)",
-    danger: "#B91C1C",
-    headingFont: "Montserrat",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
+    headingFont: "Bebas Neue",
+    bodyFont: "Inter",
+    bodyTextMode: "light",
     buttonTextMode: "dark",
-  },
-  {
-    id: "cream-violet",
-    name: "Cream Violet",
-    bg: "#F4EDE0",
-    surface: "#FBF6EC",
-    surfaceLight: "#FFFDF6",
-    accent: "#6C4BF5",
-    accentDim: "rgba(108,75,245,0.14)",
-    textPrimary: "#1A1412",
-    textMuted: "#6B625A",
-    textDim: "#9C9388",
-    border: "rgba(108,75,245,0.22)",
-    danger: "#B91C1C",
-    headingFont: "Montserrat",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  },
-  {
-    id: "cream-teal",
-    name: "Cream Teal",
-    bg: "#F4EDE0",
-    surface: "#FBF6EC",
-    surfaceLight: "#FFFDF6",
-    accent: "#14B8A6",
-    accentDim: "rgba(20,184,166,0.16)",
-    textPrimary: "#1A1412",
-    textMuted: "#6B625A",
-    textDim: "#9C9388",
-    border: "rgba(20,184,166,0.25)",
-    danger: "#B91C1C",
-    headingFont: "Montserrat",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  },
-  {
-    id: "cream-magenta",
-    name: "Cream Magenta",
-    bg: "#F4EDE0",
-    surface: "#FBF6EC",
-    surfaceLight: "#FFFDF6",
-    accent: "#EC4899",
-    accentDim: "rgba(236,72,153,0.14)",
-    textPrimary: "#1A1412",
-    textMuted: "#6B625A",
-    textDim: "#9C9388",
-    border: "rgba(236,72,153,0.22)",
-    danger: "#B91C1C",
-    headingFont: "Montserrat",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  },
-  {
-    id: "cream-sunflower",
-    name: "Cream Sunflower",
-    bg: "#F4EDE0",
-    surface: "#FBF6EC",
-    surfaceLight: "#FFFDF6",
+  }),
+  buildTheme({
+    id: "midnight-gold",
+    name: "Midnight Gold",
+    bg: "#0F1B2D",
     accent: "#F5C518",
-    accentDim: "rgba(245,197,24,0.20)",
-    textPrimary: "#1A1412",
-    textMuted: "#6B625A",
-    textDim: "#9C9388",
-    border: "rgba(245,197,24,0.30)",
-    danger: "#B91C1C",
-    headingFont: "Montserrat",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
+    headingFont: "Playfair Display",
+    bodyFont: "Inter",
+    bodyTextMode: "light",
     buttonTextMode: "dark",
-  },
-  // Two darker neutral variants for hosts who want a moodier surface
-  {
-    id: "dune-coral",
-    name: "Dune Coral",
-    bg: "#ECE3D0",
-    surface: "#F4EDE0",
-    surfaceLight: "#FBF6EC",
-    accent: "#FF5B3B",
-    accentDim: "rgba(255,91,59,0.16)",
-    textPrimary: "#1A1412",
-    textMuted: "#6B625A",
-    textDim: "#9C9388",
-    border: "rgba(255,91,59,0.25)",
-    danger: "#B91C1C",
-    headingFont: "Montserrat",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
+  }),
+  buildTheme({
+    id: "charcoal-cyan",
+    name: "Charcoal Cyan",
+    bg: "#1F2228",
+    accent: "#06B6D4",
+    headingFont: "Space Grotesk",
+    bodyFont: "Inter",
+    bodyTextMode: "light",
     buttonTextMode: "light",
-  },
-  {
-    id: "dune-violet",
-    name: "Dune Violet",
-    bg: "#ECE3D0",
-    surface: "#F4EDE0",
-    surfaceLight: "#FBF6EC",
-    accent: "#6C4BF5",
-    accentDim: "rgba(108,75,245,0.16)",
-    textPrimary: "#1A1412",
-    textMuted: "#6B625A",
-    textDim: "#9C9388",
-    border: "rgba(108,75,245,0.25)",
-    danger: "#B91C1C",
-    headingFont: "Montserrat",
+  }),
+  buildTheme({
+    id: "forest-peach",
+    name: "Forest Peach",
+    bg: "#102820",
+    accent: "#FCA17B",
+    headingFont: "Sora",
     bodyFont: "DM Sans",
-    bodyTextMode: "dark",
+    bodyTextMode: "light",
+    buttonTextMode: "dark",
+  }),
+  buildTheme({
+    id: "burgundy-cream",
+    name: "Burgundy Cream",
+    bg: "#3A1414",
+    accent: "#F4E4B8",
+    headingFont: "Playfair Display",
+    bodyFont: "DM Sans",
+    bodyTextMode: "light",
+    buttonTextMode: "dark",
+  }),
+  buildTheme({
+    id: "ink-magenta",
+    name: "Ink Magenta",
+    bg: "#1A1412",
+    accent: "#EC4899",
+    headingFont: "Outfit",
+    bodyFont: "DM Sans",
+    bodyTextMode: "light",
     buttonTextMode: "light",
-  },
+  }),
 ];
 
 /** Default theme per game type */
 export const DEFAULT_THEME: Record<GameType, GameTheme> = {
-  price_is_right: THEME_PRESETS[1], // Cream Lime — matches the TCHM brand color
-  trivia: THEME_PRESETS[2], // Cream Violet — matches the trivia brand color
+  price_is_right: THEME_PRESETS[0], // Snow Indigo — clean default
+  trivia: THEME_PRESETS[3], // Sky Plum — quiz-friendly accent
 };
 
 export function getThemeById(id: string): GameTheme | undefined {

@@ -17,6 +17,7 @@ import { WheelOfPain } from "@/components/pir/WheelOfPain";
 import { AVATAR_COLORS } from "@/lib/avatar-colors";
 import { useGameTheme } from "@/lib/theme-context";
 import { getFontFamily, getGoogleFontsUrl } from "@/lib/theme-fonts";
+import { getPatternBg } from "@/lib/theme-patterns";
 import type {
   Session,
   SessionPlayer,
@@ -56,10 +57,17 @@ export interface PIRPlayerDevMode {
 function BankShell({ children, t }: { children: React.ReactNode; t: GameTheme }) {
   const fontsUrl = getGoogleFontsUrl([t.headingFont, t.bodyFont]);
   const headingFontCss = getFontFamily(t.headingFont);
+  const patternBg = getPatternBg(t.pattern, t.accent);
   return (
     <div
       className="min-h-full flex flex-col themed-shell overflow-x-hidden"
-      style={{ background: t.bg, color: t.textPrimary, fontFamily: getFontFamily(t.bodyFont) }}
+      style={{
+        backgroundColor: t.bg,
+        backgroundImage: patternBg ?? undefined,
+        backgroundRepeat: patternBg ? "repeat" : undefined,
+        color: t.textPrimary,
+        fontFamily: getFontFamily(t.bodyFont),
+      }}
     >
       {fontsUrl && (
         // eslint-disable-next-line @next/next/no-page-custom-font
