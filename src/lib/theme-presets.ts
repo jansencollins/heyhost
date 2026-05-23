@@ -1,7 +1,9 @@
-import type { GameTheme, GameType, ThemeFont, ThemePattern } from "./types";
+import type { GameTheme, GameType, ThemeCorners, ThemeFont, ThemePattern, ThemeStyle } from "./types";
+import { STYLES, STYLE_ORDER, getStyleSpec } from "./theme-styles";
+import { AVATAR_COLORS } from "./avatar-colors";
 
 /** All available fonts for the theme picker */
-export const THEME_FONTS: { value: ThemeFont; label: string; category: "sans" | "serif" | "display" }[] = [
+export const THEME_FONTS: { value: ThemeFont; label: string; category: "sans" | "serif" | "display" | "mono" | "handwritten" }[] = [
   { value: "Montserrat", label: "Montserrat", category: "sans" },
   { value: "DM Sans", label: "DM Sans", category: "sans" },
   { value: "Inter", label: "Inter", category: "sans" },
@@ -11,14 +13,16 @@ export const THEME_FONTS: { value: ThemeFont; label: string; category: "sans" | 
   { value: "Sora", label: "Sora", category: "sans" },
   { value: "Raleway", label: "Raleway", category: "sans" },
   { value: "Nunito", label: "Nunito", category: "sans" },
+  { value: "Playfair Display", label: "Playfair Display", category: "serif" },
+  { value: "Fraunces", label: "Fraunces", category: "serif" },
   { value: "Bebas Neue", label: "Bebas Neue", category: "display" },
   { value: "Oswald", label: "Oswald", category: "display" },
-  { value: "Playfair Display", label: "Playfair Display", category: "serif" },
+  { value: "Orbitron", label: "Orbitron", category: "display" },
+  { value: "JetBrains Mono", label: "JetBrains Mono", category: "mono" },
+  { value: "Kalam", label: "Kalam", category: "handwritten" },
+  { value: "Patrick Hand", label: "Patrick Hand", category: "handwritten" },
 ];
 
-/**
- * Parse a hex color to RGB components.
- */
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace("#", "");
   return {
@@ -28,192 +32,86 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   };
 }
 
-/**
- * Lighten or darken a hex color by a factor (-1 to 1).
- * Positive = lighter, negative = darker.
- */
-function adjustColor(hex: string, factor: number): string {
-  const { r, g, b } = hexToRgb(hex);
-  const adjust = (c: number) => Math.min(255, Math.max(0, Math.round(c + (factor > 0 ? (255 - c) : c) * factor)));
-  return `#${[adjust(r), adjust(g), adjust(b)].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
-}
-
-/**
- * Build a complete GameTheme from just bg, accent, fonts, and text modes.
- * Derives all the intermediate colors automatically.
- */
+/** Compose a GameTheme from a style + mode + optional overrides. */
 export function buildTheme(opts: {
-  id: string;
-  name: string;
-  bg: string;
-  accent: string;
-  headingFont: ThemeFont;
-  bodyFont: ThemeFont;
-  bodyTextMode: "light" | "dark";
-  buttonTextMode: "light" | "dark";
+  id?: string;
+  name?: string;
+  style?: ThemeStyle;
+  mode: "light" | "dark";
+  corners?: ThemeCorners;
+  /** Override the default accent for this style/mode. */
+  accent?: string;
+  accentSecondary?: string;
+  accentTertiary?: string;
+  /** Override the default background. */
+  bg?: string;
+  headingFont?: ThemeFont;
+  bodyFont?: ThemeFont;
   pattern?: ThemePattern | null;
+  playerColors?: string[];
 }): GameTheme {
-  const { r, g, b } = hexToRgb(opts.accent);
-  const isLightBody = opts.bodyTextMode === "light";
+  const style: ThemeStyle = opts.style ?? "flat";
+  const spec = getStyleSpec(style);
+  const colors = spec.modes[opts.mode] ?? spec.modes.light ?? spec.modes.dark!;
+
+  const accent = opts.accent ?? colors.accent;
+  const { r, g, b } = hexToRgb(accent);
 
   return {
-    id: opts.id,
-    name: opts.name,
-    bg: opts.bg,
-    surface: adjustColor(opts.bg, 0.08),
-    surfaceLight: adjustColor(opts.bg, 0.15),
-    accent: opts.accent,
-    accentDim: `rgba(${r},${g},${b},0.12)`,
-    textPrimary: isLightBody ? "#FFFFFF" : "#1A1A1A",
-    textMuted: isLightBody ? adjustColor(opts.bg, 0.55) : adjustColor(opts.bg, -0.4),
-    textDim: isLightBody ? adjustColor(opts.bg, 0.35) : adjustColor(opts.bg, -0.25),
-    border: `rgba(${r},${g},${b},0.10)`,
-    danger: "#EF4444",
-    headingFont: opts.headingFont,
-    bodyFont: opts.bodyFont,
-    bodyTextMode: opts.bodyTextMode,
-    buttonTextMode: opts.buttonTextMode,
+    id: opts.id ?? `${style}-${opts.mode}-${opts.corners ?? "rounded"}`,
+    name: opts.name ?? `${spec.name} (${opts.mode})`,
+    style,
+    mode: opts.mode,
+    corners: opts.corners ?? "rounded",
+    bg: opts.bg ?? colors.bg,
+    surface: colors.surface,
+    surfaceLight: colors.surfaceLight,
+    accent,
+    accentSecondary: opts.accentSecondary ?? colors.accentSecondary,
+    accentTertiary: opts.accentTertiary ?? colors.accentTertiary,
+    accentDim: `rgba(${r},${g},${b},0.14)`,
+    textPrimary: colors.textPrimary,
+    textMuted: colors.textMuted,
+    textDim: colors.textDim,
+    border: colors.border,
+    danger: "#B91C1C",
+    headingFont: opts.headingFont ?? spec.fonts.heading,
+    bodyFont: opts.bodyFont ?? spec.fonts.body,
+    bodyTextMode: colors.bodyTextMode,
+    buttonTextMode: colors.buttonTextMode,
     pattern: opts.pattern ?? null,
+    playerColors: opts.playerColors ?? Array.from(AVATAR_COLORS),
   };
 }
 
 /**
- * Generic solid-color theme presets — a versatile set of bg/accent pairings
- * that work across game types. Mix of clean light surfaces, mid-tones, and
- * moodier dark backgrounds. All built via buildTheme() so the derived
- * surface/border/text tokens stay consistent.
+ * Auto-generate a preset for every (style × supported mode) combination.
+ * Iterates the registry in `theme-styles.ts` so adding a style adds a preset.
  */
-export const THEME_PRESETS: GameTheme[] = [
-  // Light backgrounds
-  buildTheme({
-    id: "snow-indigo",
-    name: "Snow Indigo",
-    bg: "#FAFAFA",
-    accent: "#4F46E5",
-    headingFont: "Inter",
-    bodyFont: "Inter",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  }),
-  buildTheme({
-    id: "linen-coral",
-    name: "Linen Coral",
-    bg: "#F5EFE6",
-    accent: "#F97350",
-    headingFont: "Montserrat",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  }),
-  buildTheme({
-    id: "mint-forest",
-    name: "Mint Forest",
-    bg: "#E8F5EE",
-    accent: "#15803D",
-    headingFont: "Sora",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  }),
-  buildTheme({
-    id: "sky-plum",
-    name: "Sky Plum",
-    bg: "#EEF4FB",
-    accent: "#7E22CE",
-    headingFont: "Outfit",
-    bodyFont: "Inter",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  }),
-  buildTheme({
-    id: "rose-crimson",
-    name: "Rose Crimson",
-    bg: "#FBEEF0",
-    accent: "#DC2626",
-    headingFont: "Playfair Display",
-    bodyFont: "DM Sans",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  }),
-  buildTheme({
-    id: "butter-amber",
-    name: "Butter Amber",
-    bg: "#FBF4D8",
-    accent: "#B45309",
-    headingFont: "Raleway",
-    bodyFont: "Nunito",
-    bodyTextMode: "dark",
-    buttonTextMode: "light",
-  }),
-  // Dark backgrounds
-  buildTheme({
-    id: "onyx-lime",
-    name: "Onyx Lime",
-    bg: "#0F0F12",
-    accent: "#A3E635",
-    headingFont: "Bebas Neue",
-    bodyFont: "Inter",
-    bodyTextMode: "light",
-    buttonTextMode: "dark",
-  }),
-  buildTheme({
-    id: "midnight-gold",
-    name: "Midnight Gold",
-    bg: "#0F1B2D",
-    accent: "#F5C518",
-    headingFont: "Playfair Display",
-    bodyFont: "Inter",
-    bodyTextMode: "light",
-    buttonTextMode: "dark",
-  }),
-  buildTheme({
-    id: "charcoal-cyan",
-    name: "Charcoal Cyan",
-    bg: "#1F2228",
-    accent: "#06B6D4",
-    headingFont: "Space Grotesk",
-    bodyFont: "Inter",
-    bodyTextMode: "light",
-    buttonTextMode: "light",
-  }),
-  buildTheme({
-    id: "forest-peach",
-    name: "Forest Peach",
-    bg: "#102820",
-    accent: "#FCA17B",
-    headingFont: "Sora",
-    bodyFont: "DM Sans",
-    bodyTextMode: "light",
-    buttonTextMode: "dark",
-  }),
-  buildTheme({
-    id: "burgundy-cream",
-    name: "Burgundy Cream",
-    bg: "#3A1414",
-    accent: "#F4E4B8",
-    headingFont: "Playfair Display",
-    bodyFont: "DM Sans",
-    bodyTextMode: "light",
-    buttonTextMode: "dark",
-  }),
-  buildTheme({
-    id: "ink-magenta",
-    name: "Ink Magenta",
-    bg: "#1A1412",
-    accent: "#EC4899",
-    headingFont: "Outfit",
-    bodyFont: "DM Sans",
-    bodyTextMode: "light",
-    buttonTextMode: "light",
-  }),
-];
+export const STYLE_PRESETS: GameTheme[] = STYLE_ORDER.flatMap((style) => {
+  const spec = STYLES[style];
+  const presets: GameTheme[] = [];
+  const modes: Array<"light" | "dark"> = [];
+  if (spec.modes.light) modes.push("light");
+  if (spec.modes.dark) modes.push("dark");
+  for (const mode of modes) {
+    for (const corners of ["rounded", "square"] as const) {
+      presets.push(buildTheme({ style, mode, corners }));
+    }
+  }
+  return presets;
+});
 
-/** Default theme per game type */
+/** Backwards-compat alias — older code may still import THEME_PRESETS. */
+export const THEME_PRESETS = STYLE_PRESETS;
+
+/** Default theme per game type. Basic style, light mode, rounded corners. */
 export const DEFAULT_THEME: Record<GameType, GameTheme> = {
-  price_is_right: THEME_PRESETS[0], // Snow Indigo — clean default
-  trivia: THEME_PRESETS[3], // Sky Plum — quiz-friendly accent
+  price_is_right: buildTheme({ style: "flat", mode: "light", corners: "rounded", id: "default-pir", name: "Default" }),
+  trivia: buildTheme({ style: "flat", mode: "light", corners: "rounded", id: "default-trivia", name: "Default" }),
+  stalk_market: buildTheme({ style: "flat", mode: "light", corners: "rounded", id: "default-sm", name: "Default" }),
 };
 
 export function getThemeById(id: string): GameTheme | undefined {
-  return THEME_PRESETS.find((t) => t.id === id);
+  return STYLE_PRESETS.find((t) => t.id === id);
 }

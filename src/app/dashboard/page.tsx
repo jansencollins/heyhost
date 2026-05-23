@@ -47,9 +47,10 @@ const SORTS: { key: SortKey; label: string }[] = [
 ];
 
 // Per game-type: accent (chip color) + thumbnail artwork that sits on a solid palette background
-const GAME_TYPE_ACCENT: Record<Game["game_type"], "violet" | "lime"> = {
+const GAME_TYPE_ACCENT: Record<Game["game_type"], "violet" | "lime" | "coral"> = {
   trivia: "violet",
   price_is_right: "lime",
+  stalk_market: "coral",
 };
 const GAME_TYPE_CARD: Record<
   Game["game_type"],
@@ -64,6 +65,12 @@ const GAME_TYPE_CARD: Record<
     bg: "linear-gradient(135deg, var(--lime) 0%, color-mix(in srgb, var(--lime) 70%, var(--ink)) 100%)",
     thumb: "/that-costs-how-much-thumb.png",
     thumbAnchor: "bottom",
+  },
+  stalk_market: {
+    bg: "linear-gradient(135deg, var(--coral) 0%, color-mix(in srgb, var(--coral) 70%, var(--ink)) 100%)",
+    thumb: "/stalk-market-thumb.png",
+    thumbAnchor: "bottom",
+    thumbScale: 1.2,
   },
 };
 
@@ -260,7 +267,7 @@ function GameCard({
   count,
 }: {
   game: Game;
-  accent: "violet" | "lime";
+  accent: "violet" | "lime" | "coral";
   count: number;
 }) {
   const cfg = getGameTypeConfig(game.game_type);
@@ -269,7 +276,12 @@ function GameCard({
   const [startError, setStartError] = useState<string | null>(null);
 
   const card = GAME_TYPE_CARD[game.game_type];
-  const unitLabel = game.game_type === "price_is_right" ? "product" : "question";
+  const unitLabel =
+    game.game_type === "price_is_right"
+      ? "product"
+      : game.game_type === "stalk_market"
+        ? "question"
+        : "question";
   const modifiedIso = (game as unknown as { updated_at?: string }).updated_at || game.created_at;
   const canStart = count > 0 && !starting;
 

@@ -1,9 +1,21 @@
 export type AgeRange = "teenagers" | "young_adults" | "older_adults" | "mix";
 export type Difficulty = "easy" | "medium" | "hard" | "mix";
 export type SessionStatus = "lobby" | "playing" | "finished";
-export type GameType = "trivia" | "price_is_right";
+export type GameType = "trivia" | "price_is_right" | "stalk_market";
 export type PIRPhase = "guessing" | "price_result" | "pay_the_price" | "leaderboard";
 export type DisplayMode = "tv" | "on_the_go";
+
+// Stalk Market
+export type SMScoringVersion = "pari_mutuel" | "concentration";
+export type SMGameMode = "live" | "preloaded";
+export type SMPhase =
+  | "lobby"
+  | "spotlight_answer"
+  | "investing"
+  | "adjudication"
+  | "reveal"
+  | "crash"
+  | "leaderboard";
 
 export interface Profile {
   id: string;
@@ -27,7 +39,19 @@ export type ThemeFont =
   | "Nunito"
   | "Bebas Neue"
   | "Oswald"
-  | "Playfair Display";
+  | "Playfair Display"
+  | "JetBrains Mono"
+  | "Orbitron"
+  | "Kalam"
+  | "Patrick Hand"
+  | "Fraunces";
+
+/** Visual styles for the gameplay UI. Currently we only ship Basic; older
+ *  saved themes may carry legacy ids and will fall back to flat at runtime. */
+export type ThemeStyle = "flat";
+
+/** Corner treatment — affects card radius and button shape. */
+export type ThemeCorners = "square" | "rounded";
 
 export type ThemePattern =
   | "confetti"
@@ -46,10 +70,20 @@ export type ThemePattern =
 export interface GameTheme {
   id: string;
   name: string;
+  /** Visual style. Drives card/button/shell recipes. */
+  style: ThemeStyle;
+  /** Light or dark mode of the chosen style. */
+  mode: "light" | "dark";
+  /** Corner treatment — drives radius on cards/buttons. */
+  corners: ThemeCorners;
   bg: string;
   surface: string;
   surfaceLight: string;
   accent: string;
+  /** Optional secondary accent for styles that use 2 colors (vaporwave, maximalism). */
+  accentSecondary?: string;
+  /** Optional tertiary accent for styles that use 3 colors (maximalism). */
+  accentTertiary?: string;
   accentDim: string;
   textPrimary: string;
   textMuted: string;
@@ -62,6 +96,8 @@ export interface GameTheme {
   buttonTextMode: "light" | "dark";
   /** Optional repeating background pattern that tints with accent. */
   pattern?: ThemePattern | null;
+  /** Twelve hex colors used for player avatars in the join/lobby flow. */
+  playerColors?: string[];
 }
 
 export interface Game {
@@ -81,6 +117,10 @@ export interface Game {
   penalty_expensive: string | null;
   penalty_margin: number;
   theme: GameTheme | null;
+  // Stalk Market-specific
+  sm_scoring_version: SMScoringVersion;
+  sm_game_mode: SMGameMode;
+  sm_spotlight_token: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -111,12 +151,21 @@ export interface Session {
   current_question_index: number;
   timer_seconds: number;
   speed_bonus: boolean;
+  is_paused: boolean;
   // PIR-specific fields
   pir_current_item_id: string | null;
   pir_current_item_order: number;
   pir_item_end_timestamp: string | null;
   pir_phase: PIRPhase;
   display_mode: DisplayMode;
+  // Stalk Market-specific fields
+  sm_phase: SMPhase;
+  sm_current_question_id: string | null;
+  sm_current_question_order: number;
+  sm_phase_end_timestamp: string | null;
+  sm_spotlight_player_id: string | null;
+  sm_crash_start_timestamp: string | null;
+  sm_current_spotlight_answer: string | null;
   created_at: string;
   ended_at: string | null;
 }
@@ -233,4 +282,44 @@ export interface PIRScoreEntry {
 
 export interface GameWithItems extends Game {
   price_is_right_items: PriceIsRightItem[];
+}
+
+// ============================================================
+// Stalk Market Types
+// ============================================================
+
+export interface StalkMarketQuestion {
+  id: string;
+  game_id: string;
+  question_order: number;
+  prompt: string;
+  preloaded_answer: string | null;
+  created_at: string;
+}
+
+export interface StalkMarketBet {
+  id: string;
+  session_id: string;
+  question_id: string;
+  player_id: string;
+  guess_text: string;
+  chips: number; // 1-10, each chip = $10
+  is_correct: boolean | null; // null until adjudicated
+  payout_cents: number; // computed at reveal
+  created_at: string;
+}
+
+export interface StalkMarketCrashEvent {
+  id: string;
+  session_id: string;
+  question_id: string;
+  player_id: string;
+  cashout_ms: number | null; // null = wipeout
+  saved_cents: number;
+  net_cents: number;
+  created_at: string;
+}
+
+export interface GameWithSMQuestions extends Game {
+  stalk_market_questions: StalkMarketQuestion[];
 }

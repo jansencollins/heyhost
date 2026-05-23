@@ -1,241 +1,59 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
-import { ThemePicker } from "@/components/games/ThemePicker";
+import { Spinner } from "@/components/ui/spinner";
 import { DEFAULT_THEME } from "@/lib/theme-presets";
-import type { AgeRange, Difficulty, GameTheme } from "@/lib/types";
 
-const AGE_OPTIONS = [
-  { value: "teenagers", label: "Teenagers" },
-  { value: "young_adults", label: "Young Adults (20s-40s)" },
-  { value: "older_adults", label: "Older Adults (50s+)" },
-  { value: "mix", label: "Mix" },
-];
-
-const DIFFICULTY_OPTIONS = [
-  { value: "easy", label: "Easy" },
-  { value: "medium", label: "Medium" },
-  { value: "hard", label: "Hard" },
-  { value: "mix", label: "Mix" },
-];
-
-export default function NewGamePage() {
+export default function NewTriviaGamePage() {
   const router = useRouter();
-  const [title, setTitle] = useState("");
-  const [topic, setTopic] = useState("");
-  const [ageRange, setAgeRange] = useState<AgeRange>("mix");
-  const [difficulty, setDifficulty] = useState<Difficulty>("medium");
-  const [questionCount, setQuestionCount] = useState(10);
-  const [timerSeconds, setTimerSeconds] = useState(30);
-  const [speedBonus, setSpeedBonus] = useState(true);
-  const [isShared, setIsShared] = useState(false);
-  const [theme, setTheme] = useState<GameTheme>(DEFAULT_THEME.trivia);
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const startedRef = useRef(false);
 
-  async function handleCreate() {
-    if (!topic.trim()) {
-      setError("Please enter a topic");
-      return;
-    }
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
 
-    setError("");
-    setCreating(true);
+    (async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
 
-    try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const gameTitle = title.trim() || topic.trim();
-
-      // Create game in DB
-      const { data: game, error: gameError } = await supabase
-        .from("games")
-        .insert({
-          host_id: user.id,
-          title: gameTitle,
-          topic: topic.trim(),
-          age_range: ageRange,
-          difficulty,
-          timer_seconds: timerSeconds,
-          speed_bonus: speedBonus,
-          is_shared: isShared,
-          theme,
-        })
-        .select()
-        .single();
-
-      if (gameError) throw gameError;
-
-      // Generate questions
-      const res = await fetch("/api/generate-questions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: topic.trim(),
-          ageRange,
-          difficulty,
-          count: questionCount,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to generate questions");
-
-      const data = await res.json();
-
-      // Save questions and choices
-      for (let i = 0; i < data.questions.length; i++) {
-        const q = data.questions[i];
-        const { data: question, error: qError } = await supabase
-          .from("game_questions")
+        const { data: game, error: gameError } = await supabase
+          .from("games")
           .insert({
-            game_id: game.id,
-            question_order: i,
-            prompt: q.prompt,
-            explanation: q.explanation || null,
+            host_id: user.id,
+            title: "Untitled Game",
+            game_type: "trivia",
+            theme: DEFAULT_THEME.trivia,
           })
           .select()
           .single();
 
-        if (qError) throw qError;
+        if (gameError) throw gameError;
 
-        const choices = q.choices.map((c: { text: string; isCorrect: boolean }, j: number) => ({
-          question_id: question.id,
-          choice_text: c.text,
-          is_correct: c.isCorrect,
-          choice_order: j,
-        }));
-
-        const { error: cError } = await supabase
-          .from("game_question_choices")
-          .insert(choices);
-
-        if (cError) throw cError;
+        router.replace(`/dashboard/games/${game.id}?tab=settings`);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to create game");
       }
+    })();
+  }, [router]);
 
-      // Redirect to edit page where autosave works
-      router.push(`/dashboard/games/${game.id}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create game");
-      setCreating(false);
-    }
+  if (error) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="p-4 rounded-lg bg-[color-mix(in_srgb,var(--coral)_12%,var(--paper))] text-coral text-sm">
+          {error}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold text-ink tracking-tight mb-6">
-        CREATE NEW GAME
-      </h1>
-
-      <Card variant="paper" className="mb-6">
-        <h2 className="text-lg font-semibold text-ink mb-4">
-          Game Settings
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input variant="paper"
-            label="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g., 90s Pop Culture Trivia"
-          />
-          <Input variant="paper"
-            label="Topic"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="e.g., 90s movies and music"
-          />
-          <Select variant="paper"
-            label="Age Range"
-            value={ageRange}
-            onChange={(e) => setAgeRange(e.target.value as AgeRange)}
-            options={AGE_OPTIONS}
-          />
-          <Select variant="paper"
-            label="Difficulty"
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value as Difficulty)}
-            options={DIFFICULTY_OPTIONS}
-          />
-          <div>
-            <label className="block text-sm font-medium text-ink mb-1">
-              Questions ({questionCount})
-            </label>
-            <input
-              type="range"
-              min={3}
-              max={20}
-              value={questionCount}
-              onChange={(e) => setQuestionCount(Number(e.target.value))}
-              className="w-full range-rebrand"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-ink mb-1">
-              Timer ({timerSeconds}s)
-            </label>
-            <input
-              type="range"
-              min={10}
-              max={60}
-              step={5}
-              value={timerSeconds}
-              onChange={(e) => setTimerSeconds(Number(e.target.value))}
-              className="w-full range-rebrand"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
-              <input
-                type="checkbox"
-                checked={speedBonus}
-                onChange={(e) => setSpeedBonus(e.target.checked)}
-                className="rounded range-rebrand"
-              />
-              Speed bonus (faster answers earn more points)
-            </label>
-          </div>
-          <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isShared}
-                onChange={(e) => setIsShared(e.target.checked)}
-                className="rounded range-rebrand"
-              />
-              Share this game on the Host Network
-            </label>
-            <p className="text-xs text-smoke/70 mt-1 ml-6">
-              Other hosts can discover and play your game from the Host Network.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <ThemePicker value={theme} onChange={setTheme} />
-        </div>
-
-        <div className="mt-6 flex gap-3">
-          <Button variant="cta" onClick={handleCreate} loading={creating}>
-            Create Game
-          </Button>
-          <Button variant="ghost" onClick={() => router.push("/dashboard")}>
-            Cancel
-          </Button>
-        </div>
-      </Card>
-
-      {error && (
-        <div className="mb-4 p-3 rounded-lg bg-[color-mix(in_srgb,var(--coral)_12%,var(--paper))] text-coral text-sm">
-          {error}
-        </div>
-      )}
+    <div className="flex items-center justify-center py-24">
+      <Spinner />
     </div>
   );
 }

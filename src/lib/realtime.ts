@@ -31,6 +31,8 @@ export function subscribeToSession(
     onQuestionStateChange?: RealtimeHandler;
     onAnswerChange?: RealtimeHandler;
     onPriceGuessChange?: RealtimeHandler;
+    onSMBetChange?: RealtimeHandler;
+    onSMCrashChange?: RealtimeHandler;
   }
 ): RealtimeChannel {
   const supabase = createClient();
@@ -99,6 +101,32 @@ export function subscribeToSession(
         filter: `session_id=eq.${sessionId}`,
       },
       handlers.onPriceGuessChange
+    );
+  }
+
+  if (handlers.onSMBetChange) {
+    channel = channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "stalk_market_bets",
+        filter: `session_id=eq.${sessionId}`,
+      },
+      handlers.onSMBetChange
+    );
+  }
+
+  if (handlers.onSMCrashChange) {
+    channel = channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "stalk_market_crash_events",
+        filter: `session_id=eq.${sessionId}`,
+      },
+      handlers.onSMCrashChange
     );
   }
 

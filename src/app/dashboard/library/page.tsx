@@ -16,7 +16,7 @@ interface GameTemplate {
   thumbAnchor?: "bottom" | "center";
   /** Extra scale applied to the thumb image (1 = no change). */
   thumbScale?: number;
-  gameType: "trivia" | "price_is_right";
+  gameType: "trivia" | "price_is_right" | "stalk_market";
   accent: Accent;
 }
 
@@ -62,15 +62,15 @@ const GAME_TEMPLATES: GameTemplate[] = [
     accent: "violet",
   },
   {
-    id: "pir-the-stalk-market",
-    title: "The Stalk Market",
+    id: "stalk-market",
+    title: "Stalk Market",
     description:
-      "A grocery-aisle spin on guess-the-price. Watch the item, punch in your guess, and earn points for how close you land.",
-    playerRange: "2–12 players",
+      "Real-time party game where players invest $100 a round in their guesses about the guest of honor. Right answers pay out, wrong answers get burned, and a totally-whiffed question crashes the market.",
+    playerRange: "3–12 players",
     thumb: "/stalk-market-thumb.png",
     thumbAnchor: "bottom",
     thumbScale: 1.2,
-    gameType: "price_is_right",
+    gameType: "stalk_market",
     accent: "coral",
   },
 ];
@@ -78,7 +78,7 @@ const GAME_TEMPLATES: GameTemplate[] = [
 export default function GameLibraryPage() {
   const router = useRouter();
 
-  function handleNewGame(gameType: "trivia" | "price_is_right") {
+  function handleNewGame(gameType: "trivia" | "price_is_right" | "stalk_market") {
     const config = getGameTypeConfig(gameType);
     router.push(config.createRoute);
   }

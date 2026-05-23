@@ -5,9 +5,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToSession, unsubscribe } from "@/lib/realtime";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { isInPenaltyZone } from "@/lib/pir-scoring";
+import {
+  RemoteFrame,
+  RemoteScreen,
+  RemoteSection,
+  RemoteButton,
+  RemotePlayerRow,
+} from "@/components/games/host/RemoteUI";
 import type {
   Session,
   SessionPlayer,
@@ -16,16 +22,33 @@ import type {
 } from "@/lib/types";
 import type { HostRemoteProps } from "@/lib/game-registry";
 
-export default function PIRHostRemote({ sessionId }: HostRemoteProps) {
+export interface PIRHostDevMode {
+  session?: Session | null;
+  players?: SessionPlayer[];
+  items?: PriceIsRightItem[];
+  guesses?: PriceGuess[];
+  onAction?: (action: string, payload?: Record<string, unknown>) => void;
+}
+
+export default function PIRHostRemote({ sessionId, devMode }: HostRemoteProps & { devMode?: PIRHostDevMode }) {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
-  const [players, setPlayers] = useState<SessionPlayer[]>([]);
-  const [items, setItems] = useState<PriceIsRightItem[]>([]);
-  const [guesses, setGuesses] = useState<PriceGuess[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(devMode?.session ?? null);
+  const [players, setPlayers] = useState<SessionPlayer[]>(devMode?.players ?? []);
+  const [items, setItems] = useState<PriceIsRightItem[]>(devMode?.items ?? []);
+  const [guesses, setGuesses] = useState<PriceGuess[]>(devMode?.guesses ?? []);
+  const [loading, setLoading] = useState(!devMode);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
+    if (!devMode) return;
+    if (devMode.session !== undefined) setSession(devMode.session);
+    if (devMode.players !== undefined) setPlayers(devMode.players);
+    if (devMode.items !== undefined) setItems(devMode.items);
+    if (devMode.guesses !== undefined) setGuesses(devMode.guesses);
+  }, [devMode]);
+
+  useEffect(() => {
+    if (devMode) return;
     async function load() {
       const supabase = createClient();
 
@@ -80,6 +103,7 @@ export default function PIRHostRemote({ sessionId }: HostRemoteProps) {
   }, [sessionId, router]);
 
   useEffect(() => {
+    if (devMode) return;
     if (!session) return;
 
     const channel = subscribeToSession(session.id, {
@@ -136,6 +160,7 @@ export default function PIRHostRemote({ sessionId }: HostRemoteProps) {
 
   const callAction = useCallback(
     async (action: string, extra: Record<string, unknown> = {}) => {
+      if (devMode?.onAction) { devMode.onAction(action, extra); return; }
       setActionLoading(true);
       try {
         const res = await fetch("/api/pir", {
@@ -157,20 +182,31 @@ export default function PIRHostRemote({ sessionId }: HostRemoteProps) {
         setActionLoading(false);
       }
     },
-    [sessionId]
+    [sessionId, devMode]
   );
 
   const kickPlayer = useCallback(async (playerId: string) => {
+    if (devMode?.onAction) { devMode.onAction("kick_player", { playerId }); return; }
     const supabase = createClient();
     await supabase
       .from("session_players")
       .update({ is_removed: true })
       .eq("id", playerId);
-  }, []);
+  }, [devMode]);
+
+  const togglePause = useCallback(async () => {
+    if (!session) return;
+    if (devMode?.onAction) { devMode.onAction("toggle_pause"); return; }
+    const supabase = createClient();
+    await supabase
+      .from("sessions")
+      .update({ is_paused: !session.is_paused })
+      .eq("id", session.id);
+  }, [session, devMode]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-black">
         <Spinner />
       </div>
     );
@@ -190,278 +226,166 @@ export default function PIRHostRemote({ sessionId }: HostRemoteProps) {
     (g) => g.tier && isInPenaltyZone(g.tier)
   );
 
+  const phaseLabel = isLobby ? "Lobby" : isPlaying ? phase.replace("_", " ") : "Finished";
+  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-background flex flex-col">
-      <header className="bg-white dark:bg-slate-800 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-              That Costs How Much!? - Host
-            </h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Code:{" "}
-              <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                {session.code}
-              </span>
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              href={`/screen/${session.code}`}
-              target="_blank"
-              className="text-xs text-indigo-600 dark:text-indigo-400 underline"
-            >
-              Open Screen
-            </Link>
-          </div>
-        </div>
-      </header>
+    <RemoteFrame>
+      <RemoteScreen
+        title="That Costs How Much!?"
+        code={session.code}
+        phase={phaseLabel}
+        meta={`${players.length} player${players.length === 1 ? "" : "s"} · ${items.length} items`}
+        screenHref={`/screen/${session.code}`}
+      />
 
-      <div className="flex-1 p-4 space-y-4 max-w-lg mx-auto w-full">
-        <div className="text-center">
-          <span
-            className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-              isLobby
-                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-                : isPlaying
-                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                : "bg-zinc-100 text-zinc-800 dark:bg-slate-800 dark:text-zinc-200"
-            }`}
-          >
-            {isLobby ? "Lobby" : isPlaying ? `Playing - ${phase}` : "Finished"}
-          </span>
-        </div>
-
-        {isLobby && (
-          <>
-            <div className="text-center">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-1">
-                Players ({players.length})
+      {isLobby && (
+        <>
+          <RemoteSection title={`Players · ${players.length}`}>
+            {players.length === 0 ? (
+              <p className="text-sm text-zinc-500 italic text-center py-3">
+                Waiting for players to join…
               </p>
-              <div className="flex flex-wrap justify-center gap-2 mb-4">
+            ) : (
+              <div className="space-y-2">
                 {players.map((p) => (
-                  <div key={p.id} className="flex items-center gap-1">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                      style={{ backgroundColor: p.avatar_color }}
-                    >
-                      {p.display_name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                      {p.display_name}
-                    </span>
-                    <button
-                      onClick={() => kickPlayer(p.id)}
-                      className="text-red-400 hover:text-red-600 ml-1"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
+                  <RemotePlayerRow
+                    key={p.id}
+                    name={p.display_name}
+                    color={p.avatar_color}
+                    onKick={() => kickPlayer(p.id)}
+                  />
                 ))}
               </div>
-              {players.length === 0 && (
-                <p className="text-zinc-400 text-sm">Waiting for players...</p>
-              )}
-            </div>
+            )}
+          </RemoteSection>
 
-            <Button
-              onClick={() => callAction("start_game")}
-              disabled={players.length === 0}
-              loading={actionLoading}
-              className="w-full"
-              size="lg"
-            >
-              Start Game ({items.length} items)
-            </Button>
-          </>
-        )}
+          <RemoteButton
+            onClick={() => callAction("start_game")}
+            disabled={players.length === 0 || actionLoading}
+            size="lg"
+            className="w-full"
+          >
+            Start Game · {items.length} items
+          </RemoteButton>
+        </>
+      )}
 
-        {isPlaying && !currentItem && (
-          <div className="text-center py-8">
+      {isPlaying && !currentItem && (
+        <RemoteSection>
+          <div className="flex items-center justify-center py-6">
             <Spinner />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">Loading item...</p>
           </div>
-        )}
+        </RemoteSection>
+      )}
 
-        {isPlaying && currentItem && (
-          <>
-            <div className="text-center">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Item {currentItemIndex + 1} of {items.length}
-              </p>
-              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mt-1">
-                {currentItem.name}
-              </p>
-            </div>
-
-            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">
+      {isPlaying && currentItem && (
+        <>
+          <RemoteSection title={`Item ${currentItemIndex + 1} / ${items.length}`}>
+            <p className="text-sm text-zinc-200 leading-snug">{currentItem.name}</p>
+            <p className="mt-2 text-[11px] text-zinc-500">
               Guesses: {guesses.length} / {players.length}
-            </div>
+            </p>
+          </RemoteSection>
 
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <RemoteButton onClick={togglePause} variant="secondary">
+              {session.is_paused ? "Resume" : "Pause"}
+            </RemoteButton>
             {phase === "guessing" && (
-              <Button
-                onClick={() => callAction("show_price_result")}
-                loading={actionLoading}
-                className="w-full"
-                size="lg"
-              >
+              <RemoteButton onClick={() => callAction("show_price_result")} disabled={actionLoading}>
                 Reveal Price
-              </Button>
+              </RemoteButton>
             )}
-
             {phase === "price_result" && (
-              <div className="space-y-3">
-                <p className="text-center text-sm font-medium text-green-600 dark:text-green-400">
-                  Showing price result
-                </p>
-                {penaltyPlayers.length > 0 ? (
-                  <Button
-                    onClick={() => callAction("pay_the_price")}
-                    loading={actionLoading}
-                    className="w-full"
-                    size="lg"
-                    variant="danger"
-                  >
-                    Pay The Price! ({penaltyPlayers.length} players)
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => callAction("show_leaderboard")}
-                    loading={actionLoading}
-                    className="w-full"
-                    size="lg"
-                  >
-                    Show Leaderboard
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {phase === "pay_the_price" && (
-              <div className="space-y-3">
-                <p className="text-center text-sm font-medium text-red-600 dark:text-red-400">
-                  Spinning the wheel...
-                </p>
-                <Button
+              penaltyPlayers.length > 0 ? (
+                <RemoteButton
+                  onClick={() => callAction("pay_the_price")}
+                  variant="danger"
+                  disabled={actionLoading}
+                >
+                  Pay The Price · {penaltyPlayers.length}
+                </RemoteButton>
+              ) : (
+                <RemoteButton
                   onClick={() => callAction("show_leaderboard")}
-                  loading={actionLoading}
-                  className="w-full"
-                  size="lg"
+                  disabled={actionLoading}
                 >
                   Show Leaderboard
-                </Button>
-              </div>
+                </RemoteButton>
+              )
             )}
-
+            {phase === "pay_the_price" && (
+              <RemoteButton
+                onClick={() => callAction("show_leaderboard")}
+                disabled={actionLoading}
+              >
+                Show Leaderboard
+              </RemoteButton>
+            )}
             {phase === "leaderboard" && (
-              <div className="space-y-3">
-                <p className="text-center text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                  Showing leaderboard
-                </p>
-                <Button
-                  onClick={async () => {
-                    const result = await callAction("next_item");
-                    if (result?.finished) {
-                      // Game ended
-                    }
-                  }}
-                  loading={actionLoading}
-                  className="w-full"
-                  size="lg"
-                >
-                  {isLastItem ? "Finish Game" : "Next Item"}
-                </Button>
-              </div>
+              <RemoteButton
+                onClick={() => callAction("next_item")}
+                disabled={actionLoading}
+              >
+                {isLastItem ? "Finish Game" : "Next Item"}
+              </RemoteButton>
             )}
-
-            <div className="mt-4">
-              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                Leaderboard
-              </h3>
-              <div className="space-y-1">
-                {[...players]
-                  .sort((a, b) => b.score - a.score)
-                  .slice(0, 5)
-                  .map((p, i) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center gap-2 text-sm px-3 py-1.5 rounded bg-white dark:bg-slate-800"
-                    >
-                      <span className="font-bold text-zinc-400 w-6">{i + 1}</span>
-                      <div
-                        className="w-5 h-5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: p.avatar_color }}
-                      />
-                      <span className="flex-1 text-zinc-900 dark:text-zinc-100 truncate">
-                        {p.display_name}
-                      </span>
-                      <span className="font-mono text-zinc-600 dark:text-zinc-400">
-                        {p.score}
-                      </span>
-                      <button
-                        onClick={() => kickPlayer(p.id)}
-                        className="text-red-400 hover:text-red-600"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {isFinished && (
-          <div className="text-center">
-            <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-4">
-              Game Over
-            </h2>
-            <div className="space-y-2 mb-6">
-              {[...players]
-                .sort((a, b) => b.score - a.score)
-                .map((p, i) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center gap-2 text-sm px-3 py-2 rounded bg-white dark:bg-slate-800"
-                  >
-                    <span className="font-bold text-zinc-400 w-6">#{i + 1}</span>
-                    <div
-                      className="w-6 h-6 rounded-full"
-                      style={{ backgroundColor: p.avatar_color }}
-                    />
-                    <span className="flex-1 text-zinc-900 dark:text-zinc-100">
-                      {p.display_name}
-                    </span>
-                    <span className="font-mono font-bold text-zinc-600 dark:text-zinc-300">
-                      {p.score}
-                    </span>
-                  </div>
-                ))}
-            </div>
-            <Link href="/dashboard">
-              <Button>Back to Dashboard</Button>
-            </Link>
           </div>
-        )}
 
-        {isPlaying && (
-          <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => callAction("finish_game")}
-              loading={actionLoading}
-              className="w-full"
-            >
-              End Game Now
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
+          <RemoteSection title="Leaderboard">
+            <div className="space-y-2">
+              {sortedPlayers.slice(0, 5).map((p, i) => (
+                <RemotePlayerRow
+                  key={p.id}
+                  name={p.display_name}
+                  color={p.avatar_color}
+                  rightSlot={
+                    <span className="font-mono text-xs text-zinc-400">
+                      #{i + 1} · {p.score}
+                    </span>
+                  }
+                  onKick={() => kickPlayer(p.id)}
+                />
+              ))}
+            </div>
+          </RemoteSection>
+
+          <RemoteButton
+            onClick={() => callAction("finish_game")}
+            variant="danger"
+            size="sm"
+            className="w-full"
+            disabled={actionLoading}
+          >
+            End Game Now
+          </RemoteButton>
+        </>
+      )}
+
+      {isFinished && (
+        <>
+          <RemoteSection title="Final Scores">
+            <div className="space-y-2">
+              {sortedPlayers.map((p, i) => (
+                <RemotePlayerRow
+                  key={p.id}
+                  name={p.display_name}
+                  color={p.avatar_color}
+                  rightSlot={
+                    <span className="font-mono text-xs text-zinc-300 font-bold">
+                      #{i + 1} · {p.score}
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          </RemoteSection>
+          <Link href="/dashboard" className="block">
+            <RemoteButton className="w-full">Back to Dashboard</RemoteButton>
+          </Link>
+        </>
+      )}
+    </RemoteFrame>
   );
 }

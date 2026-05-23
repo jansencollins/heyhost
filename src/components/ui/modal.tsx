@@ -7,9 +7,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  variant?: "default" | "light";
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, children, variant = "default" }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,6 +26,29 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
 
   if (!open) return null;
 
+  const isLight = variant === "light";
+
+  const panelClass = isLight
+    ? "w-full max-w-lg shadow-2xl rounded-[20px] border border-[color:var(--dune,#e8dfce)]"
+    : "glass-card w-full max-w-lg shadow-2xl";
+
+  const panelStyle: React.CSSProperties = {
+    animation: "slide-up 0.25s ease",
+    ...(isLight ? { background: "#fbf5ec" } : {}),
+  };
+
+  const headerClass = isLight
+    ? "flex items-center justify-between px-6 py-4 border-b border-[color:var(--dune,#e8dfce)]"
+    : "flex items-center justify-between px-6 py-4 border-b border-surface-border";
+
+  const titleClass = isLight
+    ? "text-lg font-bold text-[color:var(--ink,#1a1a1a)]"
+    : "text-lg font-bold text-text-primary";
+
+  const closeClass = isLight
+    ? "p-1 rounded-lg text-[color:var(--smoke,#6b6b6b)] hover:text-accent-red hover:bg-accent-red/10 transition-all"
+    : "p-1 rounded-lg text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-all";
+
   return (
     <div
       ref={overlayRef}
@@ -33,18 +57,12 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div
-        className="glass-card w-full max-w-lg shadow-2xl"
-        style={{ animation: "slide-up 0.25s ease" }}
-      >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border">
-          <h2 className="text-lg font-bold text-text-primary">
+      <div className={panelClass} style={panelStyle}>
+        <div className={headerClass}>
+          <h2 className={titleClass}>
             {title}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-all"
-          >
+          <button onClick={onClose} className={closeClass}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>

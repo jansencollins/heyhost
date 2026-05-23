@@ -1,0 +1,211 @@
+# STALK MARKET
+
+A real-time party game where players invest in their guesses about the people around them.
+
+## Premise
+
+One person — the Spotlight — is the focus of the entire game. They've answered a set of personal or fun questions, either ahead of time or live in the moment. Every other player has $100 a round to invest in guesses about what the Spotlight said. Right answers pay out, wrong answers get burned, and if the room collectively whiffs a question, the market crashes — sending everyone scrambling to cash out before they lose everything.
+
+Best for: birthdays, going-away parties, bachelor/bachelorette parties, anniversaries, retirements, family reunions. Anywhere a single person is the centerpiece of the gathering.
+
+## What You Need
+
+- 1 Spotlight (the honoree — they don't bet, they're the subject)
+- 2–11 betting players
+- A mobile device per person, including the Spotlight
+- A shared screen (TV, laptop, or projector) for reveals and the leaderboard
+- A Host to grade answers — this can be the Spotlight themselves (they know the truth) or a designated friend
+
+## Game Modes
+
+Pick one before the game starts.
+
+### Pre-Loaded Mode
+
+The Spotlight answers all questions ahead of time — alone, in private, on their phone. Their answers are locked in before the party begins. During the game, questions are revealed round by round and the bettors guess against the pre-stored answers.
+
+Best when:
+- The game is a surprise (Spotlight gets the link a day early, no one else sees the answers)
+- The Spotlight is shy or slow to type and you don't want round-by-round waits
+- The game is being played remotely or asynchronously
+- You want to include rich answers — multi-sentence stories, voice clips, photos — that take time to compose
+
+Tradeoff: less spontaneity, no live reactions during the round itself. The Spotlight has already had their reaction in private and is now watching everyone else figure it out.
+
+### Live Mode
+
+The Spotlight answers each question in real time during the game. Bettors don't see the answer until the Host reveals it.
+
+Best when:
+- The Spotlight is present and game for it
+- You want their reactions to wild guesses ("you really thought I'd say WHAT?")
+- Conversation between rounds is part of the fun
+- The group is small enough that 30-second pauses don't kill momentum
+
+Tradeoff: pacing depends on how quickly the Spotlight types and decides. Build in a 60-second cap on Spotlight answers to prevent stalling.
+
+## Round Structure
+
+**1. Question Reveal.** A question appears on the big screen. Examples: "What did you want to be when you were 8?" "What's your worst irrational fear?" "What's the most embarrassing song on your phone?"
+
+**2. Spotlight Answer.** In Live Mode, the Spotlight types their honest answer privately and submits (60-second cap). In Pre-Loaded Mode, this step is already done — the answer is sitting in storage, waiting.
+
+**3. Investment Phase.** Every bettor has $100 for the round, dealt as **ten $10 chips**. They type up to 5 guesses for what the Spotlight said and drag chips onto each guess. All ten chips must be placed before submitting. Submission window is 60 seconds.
+
+Allowed allocations include $100 on one guess, $50/$50, $30/$30/$20/$10/$10, $20×5, etc. — any way to split ten chips across one to five guesses.
+
+**4. Host Adjudication.** As guesses come in, the Host (or the Spotlight acting as Host) sees them clustered by similarity (typos and obvious near-matches grouped together). The Host can grade in parallel while submissions are still streaming in. For each guess the Host marks Match or No Match against the Spotlight's answer. The Host has full discretion on close calls — "pizza" vs "Italian food" is a judgment call, and arguing with the Host is part of the fun.
+
+**5. Big Reveal.** The Spotlight's answer is revealed on the big screen along with the funniest, most surprising, and most popular guesses. Payouts calculate and display.
+
+**6. Crash Check.** If zero correct dollars were bet across the entire room, the Stalk Market crashes (see Crash Mini-Game below).
+
+**7. Leaderboard.** Cumulative profit/loss bar chart updates on the big screen. Move to the next round.
+
+Each round resets to $100 — the leaderboard tracks cumulative profit across rounds, not bankroll. Nobody gets locked out for having a bad round.
+
+## The Spotlight's Role
+
+The Spotlight doesn't bet. They're the subject of the game, not a competitor. What they get instead:
+
+- **Knowability Score** displayed at the end — the percentage of total dollars across the game that landed on correct answers. A high score means the room knows them well; a low score means they're a beautiful enigma. Either is a flex.
+- **Reaction Cam moments** — in Live Mode especially, the big screen can highlight their face during reveals.
+- **Final word** — at the end of the game they get to share the story behind any answer that surprised the room.
+
+---
+
+## Scoring — Version A: Pari-Mutuel
+
+A closed-economy system. Every wrong dollar funds the right answers. When the Spotlight is predictable, payouts are small. When the Spotlight surprises everyone except one psychic genius, that player cleans up.
+
+### How It Works
+
+All money bet on wrong guesses goes into the Wrong Pot. Players who bet on the right answer get their correct stake back plus a share of the Wrong Pot, proportional to how much of the total correct money they put up.
+
+### Formula
+
+- **Wrong Pot** = sum of every wrong bet from every player
+- **Total Correct Stake** = sum of every correct bet from every player
+- **Your Payout** = (your correct stake) + [(your correct stake / Total Correct Stake) × Wrong Pot]
+- **Your Net for the Round** = Your Payout − $100
+
+### Worked Example
+
+Five players bet on what Sarah's first concert was. Sarah's answer: "Avril Lavigne."
+
+| Player | Bets | Correct Stake | Wrong Stake |
+|---|---|---|---|
+| Alex | $100 on "Avril Lavigne" | $100 | $0 |
+| Beth | $50 "Avril Lavigne", $50 "Taylor Swift" | $50 | $50 |
+| Carlos | $100 on "Green Day" | $0 | $100 |
+| Dana | $30/$30/$20/$20 across four different wrong guesses | $0 | $100 |
+| Eli | $100 on "Taylor Swift" | $0 | $100 |
+
+- Wrong Pot = $50 + $100 + $100 + $100 = **$350**
+- Total Correct Stake = $100 + $50 = **$150**
+- Alex: $100 + (100/150 × $350) = $100 + $233.33 = **$333.33** → Net **+$233.33**
+- Beth: $50 + (50/150 × $350) = $50 + $116.67 = **$166.67** → Net **+$66.67**
+- Carlos, Dana, Eli: $0 → Net **−$100** each
+
+Round total balances to zero, which it always will in pari-mutuel. The room redistributes its own money.
+
+### Why It Works
+
+Diversification stays useful — the $20-on-an-obscure-guess can pay huge if you're the only one who saw it coming. Concentration also stays useful — going all-in on the obvious answer still wins, just less spectacularly when everyone else also saw it. Easy questions self-balance because the Wrong Pot shrinks. Hard questions create payout fireworks for whoever guessed right.
+
+---
+
+## Scoring — Version B: Concentration Bonus
+
+An open-economy system. The "bank" pays out, and the multiplier scales inversely with how many guesses you spread across. Confident solo bets get rewarded; hedges still pay but less.
+
+### How It Works
+
+The number of *total* guesses you submitted (not how many were right) determines your payout multiplier on whichever guesses turn out to be correct. Wrong stakes are simply lost.
+
+### Multiplier Table
+
+| Guesses Submitted | Payout Multiplier |
+|---|---|
+| 1 (all-in) | 2.5× |
+| 2 | 2.0× |
+| 3 | 1.75× |
+| 4 | 1.5× |
+| 5 | 1.25× |
+
+### Formula
+
+- For each of your correct guesses: payout = stake on that guess × multiplier
+- Sum your payouts across all correct guesses
+- **Your Net for the Round** = Total Payout − $100
+
+### Worked Example (Same Scenario)
+
+| Player | Guesses | Correct Stake | Multiplier | Payout | Net |
+|---|---|---|---|---|---|
+| Alex | 1 | $100 | 2.5× | $250 | **+$150** |
+| Beth | 2 | $50 | 2.0× | $100 | **$0** |
+| Carlos | 1 | $0 | 2.5× | $0 | **−$100** |
+| Dana | 4 | $0 | 1.5× | $0 | **−$100** |
+| Eli | 1 | $0 | 2.5× | $0 | **−$100** |
+
+Round total: net **−$150** to the bank. Open economy means the room can collectively profit on easy rounds and collectively lose on hard ones.
+
+### Why It Works
+
+Simpler to explain at the table. Confidence is loudly rewarded — going all-in and being right feels great. Hedges feel like insurance: $20 across five guesses with one right earns $25 back, a small but real cushion against being totally wrong. Scores will spread faster than in Version A because nothing claws back outsized winners.
+
+---
+
+## Crash Mini-Game
+
+Triggered when zero correct dollars are bet on a question. The market panics. Everyone loses their $100 stake — but how much you actually lose depends on how well you can count.
+
+### How It Works
+
+"GO" appears on every player's phone at the same moment. No visible timer. A CASH OUT button is on screen. The market crashes at exactly **10.000 seconds**. Players have to count seconds in their heads and decide when to bail.
+
+### Standard Crash Scaling (0–9 seconds)
+
+% of stake saved = (seconds elapsed ÷ 10) × 100
+
+| Cash Out At | You Save | You Lose |
+|---|---|---|
+| 1 second | $10 | $90 |
+| 3 seconds | $30 | $70 |
+| 5 seconds | $50 | $50 |
+| 7 seconds | $70 | $30 |
+| 9 seconds | $90 | $10 |
+
+### Precision Bonus Zone (9.000–10.000 seconds)
+
+Cash outs in the final second get a **1.5× multiplier** on whatever you saved. This is the only window in the entire game where a crash can actually make you money.
+
+| Cash Out At | Base Saved | × 1.5 | Net Gain/Loss |
+|---|---|---|---|
+| 9.000s | $90 | $135 | **+$35** |
+| 9.500s | $95 | $142.50 | **+$42.50** |
+| 9.900s | $99 | $148.50 | **+$48.50** |
+| 9.990s | $99.90 | $149.85 | **+$49.85** |
+
+### Wipeout (10.000+ seconds)
+
+Don't cash out by 10.000 seconds and you lose everything. No cushion, no partial save, no mercy. The market is dead and so is your bankroll for the round.
+
+### Display Rule
+
+Other players' cash-outs are hidden until the round ends. Otherwise the second-to-cash player can use the first as a reference point, which kills the count-in-your-head tension. Reveal everyone's timing simultaneously after the wipeout window closes.
+
+---
+
+## A/B Testing Notes (Beta)
+
+Run identical question sets across both scoring versions and watch for:
+
+- **Score spread by end of game.** Version A should produce closer scores than Version B. If A is *too* close (no clear winner), the Wrong Pot redistribution may need a small house cut. If B's spread is brutal, soften the multipliers.
+- **Diversification rate.** What % of players submit 1 guess vs 5? In Version A, expect a healthy mix because tail bets can pay huge. In Version B, expect concentration on easy questions and diversification on hard ones.
+- **Crash frequency.** Aim for 1–2 crashes per ~12-round game. If crashes happen every other round, your questions are too hard or your room is too small. If they never happen, questions are too predictable.
+- **Precision bonus rate.** Track what % of cash-outs land in the 9–10s window vs wipeout. If everyone reliably nails it, tighten the bonus window to 9.5–10s. If nobody does, players might need calibration practice rounds.
+- **Host bottleneck.** Time how long the average adjudication takes. If clusters of similar guesses are slowing the Host down, invest more in the auto-clustering UI before anything else.
+
+The two versions reward genuinely different skills. A rewards knowing the room and spotting unexpected answers. B rewards confidence and bold commitment. Worth shipping both and letting players pick the vibe.

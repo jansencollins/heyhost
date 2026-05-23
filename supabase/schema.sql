@@ -55,6 +55,7 @@ create table if not exists public.games (
   difficulty text not null default 'medium',
   timer_seconds int not null default 30,
   speed_bonus boolean not null default true,
+  theme jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -76,6 +77,17 @@ create policy "Hosts can update own games"
 create policy "Hosts can delete own games"
   on public.games for delete
   using (auth.uid() = host_id);
+
+-- Allow anyone to read games that have active sessions (needed for screen/player pages)
+create policy "Anyone can read games with active sessions"
+  on public.games for select
+  using (
+    exists (
+      select 1 from public.sessions
+      where sessions.game_id = games.id
+        and sessions.status in ('lobby', 'playing')
+    )
+  );
 
 -- ============================================================
 -- GAME QUESTIONS
@@ -196,9 +208,13 @@ create table if not exists public.sessions (
   current_question_index int not null default -1,
   timer_seconds int not null default 30,
   speed_bonus boolean not null default true,
+  is_paused boolean not null default false,
   created_at timestamptz not null default now(),
   ended_at timestamptz
 );
+
+-- Idempotent column add for existing databases.
+alter table public.sessions add column if not exists is_paused boolean not null default false;
 
 create unique index if not exists sessions_active_code_idx
   on public.sessions (code) where status != 'finished';

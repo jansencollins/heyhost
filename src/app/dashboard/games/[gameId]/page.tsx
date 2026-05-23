@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, use } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Modal } from "@/components/ui/modal";
 import { generateGameCode } from "@/lib/game-code";
 import { getGameTypeConfig } from "@/lib/game-registry";
-import { ThemePicker } from "@/components/games/ThemePicker";
+import { GamePreview } from "@/components/games/GamePreview";
 import { DEFAULT_THEME } from "@/lib/theme-presets";
 import type { Game, GameQuestionWithChoices, AgeRange, Difficulty, GameTheme, GeneratedQuestion } from "@/lib/types";
 
@@ -45,6 +45,7 @@ export default function GameDetailPage({
 }) {
   const { gameId } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [game, setGame] = useState<Game | null>(null);
   const [questions, setQuestions] = useState<GameQuestionWithChoices[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +53,10 @@ export default function GameDetailPage({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("questions");
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const t = searchParams?.get("tab");
+    return t === "howto" || t === "settings" || t === "questions" || t === "preview" ? t : "questions";
+  });
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
   const [generatingWrongIdx, setGeneratingWrongIdx] = useState<number | null>(null);
   const [addingQuestion, setAddingQuestion] = useState(false);
@@ -118,6 +122,12 @@ export default function GameDetailPage({
     // Redirect PIR games to dedicated edit page
     if (gameData.game_type === "price_is_right") {
       router.replace(`/dashboard/games/${gameId}/that-costs-how-much`);
+      return;
+    }
+
+    // Redirect Stalk Market games to dedicated edit page
+    if (gameData.game_type === "stalk_market") {
+      router.replace(`/dashboard/games/${gameId}/stalk-market`);
       return;
     }
 
@@ -1145,16 +1155,6 @@ export default function GameDetailPage({
               </div>
             </section>
 
-            {/* Row 4 — Theme */}
-            <section className="card-rebrand p-6 lg:col-span-6">
-              <SettingsHeader
-                title="Theme"
-                description="How the game looks on the TV and on players' phones while you host."
-              />
-              <div className="mt-5">
-                <ThemePicker value={theme} onChange={setTheme} />
-              </div>
-            </section>
           </div>
         </div>
       )}
@@ -1495,7 +1495,7 @@ export default function GameDetailPage({
         </div>
       )}
 
-      {/* Game Preview Tab — placeholder */}
+      {/* Game Preview Tab */}
       {activeTab === "preview" && (
         <div
           className="card-rebrand card-anchor tab-panel p-5 lg:p-6 pt-7 lg:pt-8 border-t-0 tab-panel-enter"
@@ -1505,11 +1505,15 @@ export default function GameDetailPage({
             borderColor: "rgba(0,0,0,0.18)",
             borderTopLeftRadius: 0,
             borderTopRightRadius: 0,
+            overflow: "visible",
           }}
         >
-          <div className="min-h-[320px] flex items-center justify-center text-center text-smoke text-[14px]">
-            Game preview coming soon.
-          </div>
+          <GamePreview
+            gameType="trivia"
+            theme={theme}
+            onThemeChange={setTheme}
+            gameTitle={title}
+          />
         </div>
       )}
 
@@ -1517,6 +1521,7 @@ export default function GameDetailPage({
       <Modal
         open={aiModalOpen}
         onClose={() => !aiSaving && setAiModalOpen(false)}
+        variant="light"
         title={
           aiStep === "count"
             ? "Generate questions with AI"

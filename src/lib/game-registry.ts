@@ -111,6 +111,23 @@ export const GAME_TYPES: Record<GameType, GameTypeConfig> = {
       ScreenPage: () => import("@/components/games/pir/ScreenPage"),
     },
   },
+  stalk_market: {
+    key: "stalk_market",
+    label: "Stalk Market",
+    description: "Invest in your guesses about the guest of honor",
+    icon: "📈",
+    thumbnail: "/stalk-market-thumbnail.png",
+    hostRoute: (sessionId) => `/host/${sessionId}`,
+    playerRoute: (sessionCode) => `/play/${sessionCode}`,
+    screenRoute: (sessionCode) => `/screen/${sessionCode}`,
+    createRoute: "/dashboard/games/new/stalk-market",
+    editRoute: (gameId) => `/dashboard/games/${gameId}/stalk-market`,
+    components: {
+      HostRemote: () => import("@/components/games/sm/HostRemote"),
+      PlayerPage: () => import("@/components/games/sm/PlayerPage"),
+      ScreenPage: () => import("@/components/games/sm/ScreenPage"),
+    },
+  },
 };
 
 /** Get config for a game type, with fallback to trivia */

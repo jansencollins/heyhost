@@ -5,8 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToSession, unsubscribe } from "@/lib/realtime";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  RemoteFrame,
+  RemoteScreen,
+  RemoteSection,
+  RemoteButton,
+  RemotePlayerRow,
+} from "@/components/games/host/RemoteUI";
 import type {
   Session,
   SessionPlayer,
@@ -16,18 +22,39 @@ import type {
 } from "@/lib/types";
 import type { HostRemoteProps } from "@/lib/game-registry";
 
-export default function TriviaHostRemote({ sessionId }: HostRemoteProps) {
+export interface TriviaHostDevMode {
+  session?: Session | null;
+  players?: SessionPlayer[];
+  questions?: GameQuestion[];
+  questionState?: SessionQuestionState | null;
+  answers?: SessionAnswer[];
+  timerSeconds?: number;
+  onAction?: (action: string, payload?: Record<string, unknown>) => void;
+}
+
+export default function TriviaHostRemote({ sessionId, devMode }: HostRemoteProps & { devMode?: TriviaHostDevMode }) {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
-  const [players, setPlayers] = useState<SessionPlayer[]>([]);
-  const [questions, setQuestions] = useState<GameQuestion[]>([]);
+  const [session, setSession] = useState<Session | null>(devMode?.session ?? null);
+  const [players, setPlayers] = useState<SessionPlayer[]>(devMode?.players ?? []);
+  const [questions, setQuestions] = useState<GameQuestion[]>(devMode?.questions ?? []);
   const [questionState, setQuestionState] =
-    useState<SessionQuestionState | null>(null);
-  const [answers, setAnswers] = useState<SessionAnswer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [timerSeconds, setTimerSeconds] = useState(30);
+    useState<SessionQuestionState | null>(devMode?.questionState ?? null);
+  const [answers, setAnswers] = useState<SessionAnswer[]>(devMode?.answers ?? []);
+  const [loading, setLoading] = useState(!devMode);
+  const [timerSeconds, setTimerSeconds] = useState(devMode?.timerSeconds ?? 30);
+
+  // Keep state in sync with devMode prop so dev page mutations propagate.
+  useEffect(() => {
+    if (!devMode) return;
+    if (devMode.session !== undefined) setSession(devMode.session);
+    if (devMode.players !== undefined) setPlayers(devMode.players);
+    if (devMode.questions !== undefined) setQuestions(devMode.questions);
+    if (devMode.questionState !== undefined) setQuestionState(devMode.questionState);
+    if (devMode.answers !== undefined) setAnswers(devMode.answers);
+  }, [devMode]);
 
   useEffect(() => {
+    if (devMode) return;
     async function load() {
       const supabase = createClient();
 
@@ -98,6 +125,7 @@ export default function TriviaHostRemote({ sessionId }: HostRemoteProps) {
   }, [sessionId, router]);
 
   useEffect(() => {
+    if (devMode) return;
     if (!session) return;
 
     const channel = subscribeToSession(session.id, {
@@ -131,6 +159,7 @@ export default function TriviaHostRemote({ sessionId }: HostRemoteProps) {
 
   const startGame = useCallback(async () => {
     if (!session || questions.length === 0) return;
+    if (devMode?.onAction) { devMode.onAction("start_game"); return; }
     const supabase = createClient();
 
     await supabase
@@ -157,6 +186,7 @@ export default function TriviaHostRemote({ sessionId }: HostRemoteProps) {
 
   const pauseResume = useCallback(async () => {
     if (!questionState || !session) return;
+    if (devMode?.onAction) { devMode.onAction("pause_resume"); return; }
     const supabase = createClient();
 
     if (questionState.is_paused) {
@@ -173,6 +203,10 @@ export default function TriviaHostRemote({ sessionId }: HostRemoteProps) {
           ends_at: newEndsAt.toISOString(),
         })
         .eq("id", questionState.id);
+      await supabase
+        .from("sessions")
+        .update({ is_paused: false })
+        .eq("id", session.id);
     } else {
       const remaining = Math.max(
         0,
@@ -185,29 +219,36 @@ export default function TriviaHostRemote({ sessionId }: HostRemoteProps) {
           paused_remaining_ms: remaining,
         })
         .eq("id", questionState.id);
+      await supabase
+        .from("sessions")
+        .update({ is_paused: true })
+        .eq("id", session.id);
     }
-  }, [questionState, session, timerSeconds]);
+  }, [questionState, session, timerSeconds, devMode]);
 
   const endQuestionEarly = useCallback(async () => {
     if (!questionState || !session) return;
+    if (devMode?.onAction) { devMode.onAction("end_question_early"); return; }
     const supabase = createClient();
     await supabase
       .from("session_question_state")
       .update({ is_locked: true, show_results: true })
       .eq("id", questionState.id);
-  }, [questionState, session]);
+  }, [questionState, session, devMode]);
 
   const showLeaderboard = useCallback(async () => {
     if (!questionState || !session) return;
+    if (devMode?.onAction) { devMode.onAction("show_leaderboard"); return; }
     const supabase = createClient();
     await supabase
       .from("session_question_state")
       .update({ show_leaderboard: true })
       .eq("id", questionState.id);
-  }, [questionState, session]);
+  }, [questionState, session, devMode]);
 
   const nextQuestion = useCallback(async () => {
     if (!session || !questions.length) return;
+    if (devMode?.onAction) { devMode.onAction("next_question"); return; }
     const supabase = createClient();
     const nextIndex = session.current_question_index + 1;
 
@@ -244,27 +285,29 @@ export default function TriviaHostRemote({ sessionId }: HostRemoteProps) {
   const kickPlayer = useCallback(
     async (playerId: string) => {
       if (!session) return;
+      if (devMode?.onAction) { devMode.onAction("kick_player", { playerId }); return; }
       const supabase = createClient();
       await supabase
         .from("session_players")
         .update({ is_removed: true })
         .eq("id", playerId);
     },
-    [session]
+    [session, devMode]
   );
 
   const endGame = useCallback(async () => {
     if (!session) return;
+    if (devMode?.onAction) { devMode.onAction("end_game"); return; }
     const supabase = createClient();
     await supabase
       .from("sessions")
       .update({ status: "finished", ended_at: new Date().toISOString() })
       .eq("id", session.id);
-  }, [session]);
+  }, [session, devMode]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-black">
         <Spinner />
       </div>
     );
@@ -281,222 +324,126 @@ export default function TriviaHostRemote({ sessionId }: HostRemoteProps) {
   const isLastQuestion =
     session.current_question_index >= questions.length - 1;
 
+  const phaseLabel = isLobby ? "Lobby" : isPlaying ? "Playing" : "Finished";
+  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-background flex flex-col">
-      <header className="bg-white dark:bg-slate-800 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-              Host Remote
-            </h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Code:{" "}
-              <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                {session.code}
-              </span>
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              href={`/screen/${session.code}`}
-              target="_blank"
-              className="text-xs text-indigo-600 dark:text-indigo-400 underline"
-            >
-              Open Screen
-            </Link>
-          </div>
-        </div>
-      </header>
+    <RemoteFrame>
+      <RemoteScreen
+        title="Straight Off The Dome"
+        code={session.code}
+        phase={phaseLabel}
+        meta={`${players.length} player${players.length === 1 ? "" : "s"} · ${questions.length} questions`}
+        screenHref={`/screen/${session.code}`}
+      />
 
-      <div className="flex-1 p-4 space-y-4 max-w-lg mx-auto w-full">
-        <div className="text-center">
-          <span
-            className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-              isLobby
-                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-                : isPlaying
-                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                : "bg-zinc-100 text-zinc-800 dark:bg-slate-800 dark:text-zinc-200"
-            }`}
-          >
-            {isLobby ? "Lobby" : isPlaying ? "Playing" : "Finished"}
-          </span>
-        </div>
-
-        {isLobby && (
-          <>
-            <div className="text-center">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-1">
-                Players ({players.length})
+      {isLobby && (
+        <>
+          <RemoteSection title={`Players · ${players.length}`}>
+            {players.length === 0 ? (
+              <p className="text-sm text-zinc-500 italic text-center py-3">
+                Waiting for players to join…
               </p>
-              <div className="flex flex-wrap justify-center gap-2 mb-4">
+            ) : (
+              <div className="space-y-2">
                 {players.map((p) => (
-                  <div key={p.id} className="flex items-center gap-1">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                      style={{ backgroundColor: p.avatar_color }}
-                    >
-                      {p.display_name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                      {p.display_name}
-                    </span>
-                    <button
-                      onClick={() => kickPlayer(p.id)}
-                      className="text-red-400 hover:text-red-600 ml-1"
-                      title="Remove player"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {players.length === 0 && (
-                <p className="text-zinc-400 dark:text-zinc-500 text-sm">
-                  Waiting for players to join...
-                </p>
-              )}
-            </div>
-
-            <Button
-              onClick={startGame}
-              disabled={players.length === 0}
-              className="w-full"
-              size="lg"
-            >
-              Start Game ({questions.length} questions)
-            </Button>
-          </>
-        )}
-
-        {isPlaying && currentQ && (
-          <>
-            <div className="text-center">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Question {session.current_question_index + 1} of {questions.length}
-              </p>
-              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mt-1">
-                {currentQ.prompt}
-              </p>
-            </div>
-
-            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-              Answers: {answers.length} / {players.length}
-            </div>
-
-            {questionState && !questionState.show_results && !questionState.is_locked ? (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <Button onClick={pauseResume} variant="secondary">
-                    {questionState.is_paused ? "Resume" : "Pause"}
-                  </Button>
-                  <Button onClick={endQuestionEarly} variant="secondary">
-                    End Question
-                  </Button>
-                </div>
-              </div>
-            ) : questionState?.show_results && !questionState.show_leaderboard ? (
-              <div className="space-y-3">
-                <p className="text-center text-sm font-medium text-green-600 dark:text-green-400">
-                  Showing results
-                </p>
-                <Button onClick={showLeaderboard} className="w-full" size="lg">
-                  Show Leaderboard
-                </Button>
-              </div>
-            ) : questionState?.show_leaderboard ? (
-              <div className="space-y-3">
-                <p className="text-center text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                  Showing leaderboard
-                </p>
-                <Button onClick={nextQuestion} className="w-full" size="lg">
-                  {isLastQuestion ? "Finish Game" : "Next Question"}
-                </Button>
-              </div>
-            ) : null}
-
-            <div className="mt-4">
-              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                Leaderboard
-              </h3>
-              <div className="space-y-1">
-                {[...players]
-                  .sort((a, b) => b.score - a.score)
-                  .slice(0, 5)
-                  .map((p, i) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center gap-2 text-sm px-3 py-1.5 rounded bg-white dark:bg-slate-800"
-                    >
-                      <span className="font-bold text-zinc-400 w-6">{i + 1}</span>
-                      <div
-                        className="w-5 h-5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: p.avatar_color }}
-                      />
-                      <span className="flex-1 text-zinc-900 dark:text-zinc-100 truncate">
-                        {p.display_name}
-                      </span>
-                      <span className="font-mono text-zinc-600 dark:text-zinc-400">
-                        {p.score}
-                      </span>
-                      <button
-                        onClick={() => kickPlayer(p.id)}
-                        className="text-red-400 hover:text-red-600"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {isFinished && (
-          <div className="text-center">
-            <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-4">
-              Game Over
-            </h2>
-            <div className="space-y-2 mb-6">
-              {[...players]
-                .sort((a, b) => b.score - a.score)
-                .map((p, i) => (
-                  <div
+                  <RemotePlayerRow
                     key={p.id}
-                    className="flex items-center gap-2 text-sm px-3 py-2 rounded bg-white dark:bg-slate-800"
-                  >
-                    <span className="font-bold text-zinc-400 w-6">#{i + 1}</span>
-                    <div
-                      className="w-6 h-6 rounded-full"
-                      style={{ backgroundColor: p.avatar_color }}
-                    />
-                    <span className="flex-1 text-zinc-900 dark:text-zinc-100">
-                      {p.display_name}
-                    </span>
-                    <span className="font-mono font-bold text-zinc-600 dark:text-zinc-300">
-                      {p.score}
-                    </span>
-                  </div>
+                    name={p.display_name}
+                    color={p.avatar_color}
+                    onKick={() => kickPlayer(p.id)}
+                  />
                 ))}
-            </div>
-            <Link href="/dashboard">
-              <Button>Back to Dashboard</Button>
-            </Link>
-          </div>
-        )}
+              </div>
+            )}
+          </RemoteSection>
 
-        {isPlaying && (
-          <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
-            <Button variant="danger" size="sm" onClick={endGame} className="w-full">
-              End Game Now
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
+          <RemoteButton
+            onClick={startGame}
+            disabled={players.length === 0}
+            size="lg"
+            className="w-full"
+          >
+            Start Game · {questions.length} questions
+          </RemoteButton>
+        </>
+      )}
+
+      {isPlaying && currentQ && (
+        <>
+          <RemoteSection title={`Question ${session.current_question_index + 1} / ${questions.length}`}>
+            <p className="text-sm text-zinc-200 leading-snug">{currentQ.prompt}</p>
+            <p className="mt-2 text-[11px] text-zinc-500">
+              Answers: {answers.length} / {players.length}
+            </p>
+          </RemoteSection>
+
+          {questionState && !questionState.show_results && !questionState.is_locked ? (
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <RemoteButton onClick={pauseResume} variant="secondary">
+                {questionState.is_paused ? "Resume" : "Pause"}
+              </RemoteButton>
+              <RemoteButton onClick={endQuestionEarly} variant="secondary">
+                End Question
+              </RemoteButton>
+            </div>
+          ) : questionState?.show_results && !questionState.show_leaderboard ? (
+            <RemoteButton onClick={showLeaderboard} size="lg" className="w-full mb-3">
+              Show Leaderboard
+            </RemoteButton>
+          ) : questionState?.show_leaderboard ? (
+            <RemoteButton onClick={nextQuestion} size="lg" className="w-full mb-3">
+              {isLastQuestion ? "Finish Game" : "Next Question"}
+            </RemoteButton>
+          ) : null}
+
+          <RemoteSection title="Leaderboard">
+            <div className="space-y-2">
+              {sortedPlayers.slice(0, 5).map((p, i) => (
+                <RemotePlayerRow
+                  key={p.id}
+                  name={p.display_name}
+                  color={p.avatar_color}
+                  rightSlot={
+                    <span className="font-mono text-xs text-zinc-400">
+                      #{i + 1} · {p.score}
+                    </span>
+                  }
+                  onKick={() => kickPlayer(p.id)}
+                />
+              ))}
+            </div>
+          </RemoteSection>
+
+          <RemoteButton onClick={endGame} variant="danger" size="sm" className="w-full">
+            End Game Now
+          </RemoteButton>
+        </>
+      )}
+
+      {isFinished && (
+        <>
+          <RemoteSection title="Final Scores">
+            <div className="space-y-2">
+              {sortedPlayers.map((p, i) => (
+                <RemotePlayerRow
+                  key={p.id}
+                  name={p.display_name}
+                  color={p.avatar_color}
+                  rightSlot={
+                    <span className="font-mono text-xs text-zinc-300 font-bold">
+                      #{i + 1} · {p.score}
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          </RemoteSection>
+          <Link href="/dashboard" className="block">
+            <RemoteButton className="w-full">Back to Dashboard</RemoteButton>
+          </Link>
+        </>
+      )}
+    </RemoteFrame>
   );
 }

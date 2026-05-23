@@ -30,8 +30,12 @@ export function CountdownTimer({ endsAt, totalSeconds = 30, size = "md" }: Count
   const activeBars = Math.round((remaining / totalSeconds) * totalBars);
   const expired = remaining <= 0;
 
-  const dim = size === "sm" ? 72 : 112; // w/h in px
-  const radius = dim / 2;
+  // All sizes are cqmin-based so the timer scales with the .themed-screen
+  // shell, the same way the surrounding text and Tailwind utilities do.
+  // 1cqmin ≈ 10.8px on a 1080-tall shell, so 6.7cqmin ≈ 72px and
+  // 10.4cqmin ≈ 112px (matching the original px design values).
+  const dim = size === "sm" ? "6.7cqmin" : "10.4cqmin";
+  const radius = size === "sm" ? "3.35cqmin" : "5.2cqmin";
   const barW = size === "sm" ? "w-1.5" : "w-2";
   const barH = size === "sm" ? "h-3.5" : "h-5";
   const textSize = size === "sm" ? "text-lg" : "text-2xl";
@@ -45,7 +49,7 @@ export function CountdownTimer({ endsAt, totalSeconds = 30, size = "md" }: Count
           <div
             key={i}
             className="absolute left-1/2 top-0 -translate-x-1/2"
-            style={{ transform: `rotate(${angle}deg)`, transformOrigin: `center ${radius}px` }}
+            style={{ transform: `rotate(${angle}deg)`, transformOrigin: `center ${radius}` }}
           >
             <div
               className={`${barW} ${barH} rounded-sm transition-colors duration-300 ${

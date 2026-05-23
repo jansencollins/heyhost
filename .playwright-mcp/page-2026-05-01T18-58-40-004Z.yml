@@ -1,0 +1,108 @@
+- generic [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e7] [cursor=pointer]:
+    - img [ref=e8]
+  - alert [ref=e11]
+  - generic [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - heading "Dev Preview" [level=1] [ref=e16]
+        - paragraph [ref=e17]: View game screens with mock data
+      - generic [ref=e19]:
+        - button "Phone" [ref=e20]
+        - button "Tablet" [ref=e21]
+        - button "Desktop" [ref=e22]
+        - button "Full" [ref=e23]
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]: Mode
+          - generic [ref=e28]:
+            - button "Light" [ref=e29]: Light
+            - button "Dark" [ref=e31]: Dark
+        - generic [ref=e33]:
+          - generic [ref=e34]: Corners
+          - generic [ref=e35]:
+            - button "Square" [ref=e36]: Square
+            - button "Rounded" [ref=e38]: Rounded
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - generic [ref=e42]: Background
+            - generic [ref=e43]:
+              - textbox [ref=e45] [cursor=pointer]: "#ffffff"
+              - textbox [ref=e46]: "#FFFFFF"
+          - generic [ref=e47]:
+            - generic [ref=e48]: Accent
+            - generic [ref=e49]:
+              - textbox [ref=e51] [cursor=pointer]: "#3b82f6"
+              - textbox [ref=e52]: "#3B82F6"
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - generic [ref=e55]: Heading Font
+            - button "Heading font" [ref=e57] [cursor=pointer]:
+              - generic [ref=e58]: Outfit
+              - img [ref=e59]
+          - generic [ref=e61]:
+            - generic [ref=e62]: Body Font
+            - button "Body font" [ref=e64] [cursor=pointer]:
+              - generic [ref=e65]: Outfit
+              - img [ref=e66]
+      - generic [ref=e68]:
+        - generic [ref=e69]:
+          - button "Trivia — Player" [ref=e70]:
+            - generic [ref=e71]: Trivia — Player
+            - img [ref=e72]
+          - generic [ref=e74]:
+            - button "Joining" [ref=e75]
+            - button "Lobby" [ref=e76]
+            - button "Question" [ref=e77]
+            - button "Results" [ref=e78]
+            - button "Leaderboard" [ref=e79]
+            - button "Finished" [ref=e80]
+            - button "Removed" [ref=e81]
+            - button "Error" [ref=e82]
+        - button "Trivia — Screen" [ref=e84]:
+          - generic [ref=e85]: Trivia — Screen
+          - img [ref=e86]
+        - button "PIR — Player" [ref=e89]:
+          - generic [ref=e90]: PIR — Player
+          - img [ref=e91]
+        - button "PIR — Screen" [ref=e94]:
+          - generic [ref=e95]: PIR — Screen
+          - img [ref=e96]
+    - generic [ref=e98]:
+      - generic [ref=e99]:
+        - generic [ref=e100]:
+          - text: Trivia — Player
+          - heading "Joining" [level=2] [ref=e101]
+        - generic [ref=e102]: tp-joining
+      - generic [ref=e106]:
+        - generic: w:1500 cols:6
+        - generic [ref=e107]:
+          - generic [ref=e108]:
+            - generic [ref=e109]:
+              - img [ref=e110]
+              - generic [ref=e112]: "Game Code: DEMO"
+            - generic [ref=e114]:
+              - heading "Straight Off The Dome" [level=1] [ref=e115]
+              - paragraph [ref=e116]: History Trivia Edition
+          - generic [ref=e117]:
+            - generic [ref=e118]:
+              - generic [ref=e119]: Player Name
+              - textbox "Enter your name" [active] [ref=e120]
+            - generic [ref=e121]:
+              - paragraph [ref=e122]: Pick a Color
+              - generic [ref=e123]:
+                - button [ref=e124]:
+                  - img [ref=e127]
+                - button [ref=e129]
+                - button [ref=e130]
+                - button [ref=e131]
+                - button [ref=e132]
+                - button [ref=e133]
+                - button [ref=e134]
+                - button [ref=e135]
+                - button [ref=e136]
+                - button [ref=e137]
+                - button [ref=e138]
+                - button [ref=e139]
+          - button "Join Game" [ref=e141]:
+            - generic [ref=e142]: Join Game

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { PlayerCardIcon } from "@/components/pir/PlayerCardIcon";
+import { useGameTheme } from "@/lib/theme-context";
 
 interface WheelSlice {
   label: string;
@@ -13,6 +15,13 @@ interface WheelOfPainProps {
   onResult: (playerId: string) => void;
   onClose: () => void;
   inline?: boolean;
+  /** Theme accent for the title + pointer. Falls back to red. */
+  themeAccent?: string;
+  /** Heading font for the title. */
+  headingFontFamily?: string;
+  /** When false, the wheel mounts in a static paused state and won't spin
+   *  until the parent triggers a remount (e.g. via a key bump). Default true. */
+  autoSpin?: boolean;
 }
 
 function buildSlices(
@@ -27,37 +36,29 @@ function buildSlices(
   return slices;
 }
 
-// Parse hex to RGB
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.startsWith("#") ? hex : "#888888";
-  return [
-    parseInt(h.slice(1, 3), 16),
-    parseInt(h.slice(3, 5), 16),
-    parseInt(h.slice(5, 7), 16),
-  ];
-}
-
-// Darken a hex color by a factor (0–1)
-function darkenColor(hex: string, factor: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  return `rgb(${Math.round(r * (1 - factor))},${Math.round(g * (1 - factor))},${Math.round(b * (1 - factor))})`;
-}
-
-// Lighten a hex color by a factor (0–1)
-function lightenColor(hex: string, factor: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  return `rgb(${Math.min(255, Math.round(r + (255 - r) * factor))},${Math.min(255, Math.round(g + (255 - g) * factor))},${Math.min(255, Math.round(b + (255 - b) * factor))})`;
-}
-
-export function WheelOfPain({ contestants, onResult, onClose, inline }: WheelOfPainProps) {
+export function WheelOfPain({
+  contestants,
+  onResult,
+  onClose,
+  inline,
+  themeAccent,
+  headingFontFamily,
+  autoSpin = true,
+}: WheelOfPainProps) {
+  const theme = useGameTheme();
+  const accent = themeAccent ?? "#ef4444";
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rotationRef = useRef(0);
   const velocityRef = useRef(0);
   const spinningRef = useRef(false);
   const animFrameRef = useRef<number>(0);
-  const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [winner, setWinner] = useState<{ name: string; color: string } | null>(null);
   const booingRef = useRef<HTMLAudioElement | null>(null);
+  // Slices/getWinningSlice/animate/spin all rebuild on each render, which
+  // would normally re-fire the auto-spin effect after the wheel resolves.
+  // Gate it with a ref so the wheel only auto-spins once per mount.
+  const hasAutoSpunRef = useRef(false);
 
   const slices = buildSlices(contestants);
   const sliceAngle = (2 * Math.PI) / slices.length;
@@ -74,31 +75,19 @@ export function WheelOfPain({ contestants, onResult, onClose, inline }: WheelOfP
 
     ctx.clearRect(0, 0, size, size);
 
-    // Outer ring / border glow
+    // Flat outer ring in the theme accent
     ctx.beginPath();
-    ctx.arc(center, center, radius + 8, 0, 2 * Math.PI);
-    ctx.strokeStyle = "#ef4444";
+    ctx.arc(center, center, radius + 4, 0, 2 * Math.PI);
+    ctx.strokeStyle = accent;
     ctx.lineWidth = 4;
-    ctx.shadowColor = "rgba(239,68,68,0.6)";
-    ctx.shadowBlur = 12;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Inner dark ring
-    ctx.beginPath();
-    ctx.arc(center, center, radius + 3, 0, 2 * Math.PI);
-    ctx.strokeStyle = "rgba(0,0,0,0.5)";
-    ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Draw slices with bevel
+    // Flat slices — solid color fill + thin separator line, no gradients
     slices.forEach((slice, i) => {
       const startAngle = rotationRef.current + i * sliceAngle;
       const endAngle = startAngle + sliceAngle;
       const midAngle = startAngle + sliceAngle / 2;
-      const hex = slice.color.startsWith("#") ? slice.color : "#888888";
 
-      // Base slice fill
       ctx.beginPath();
       ctx.moveTo(center, center);
       ctx.arc(center, center, radius, startAngle, endAngle);
@@ -106,60 +95,15 @@ export function WheelOfPain({ contestants, onResult, onClose, inline }: WheelOfP
       ctx.fillStyle = slice.color;
       ctx.fill();
 
-      // Bevel highlight — lighter strip along the leading edge
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(center, center);
-      ctx.arc(center, center, radius, startAngle, endAngle);
-      ctx.closePath();
-      ctx.clip();
-
-      // Top-light bevel: gradient from light edge to dark edge across the slice
-      const bevelGrad = ctx.createLinearGradient(
-        center + Math.cos(startAngle) * radius,
-        center + Math.sin(startAngle) * radius,
-        center + Math.cos(endAngle) * radius,
-        center + Math.sin(endAngle) * radius
-      );
-      bevelGrad.addColorStop(0, lightenColor(hex, 0.35));
-      bevelGrad.addColorStop(0.15, lightenColor(hex, 0.15));
-      bevelGrad.addColorStop(0.5, slice.color);
-      bevelGrad.addColorStop(0.85, darkenColor(hex, 0.15));
-      bevelGrad.addColorStop(1, darkenColor(hex, 0.35));
-
-      ctx.fillStyle = bevelGrad;
-      ctx.fill();
-
-      // Radial depth — darker toward the rim
-      const depthGrad = ctx.createRadialGradient(center, center, radius * 0.3, center, center, radius);
-      depthGrad.addColorStop(0, "rgba(255,255,255,0.08)");
-      depthGrad.addColorStop(0.6, "rgba(0,0,0,0)");
-      depthGrad.addColorStop(1, "rgba(0,0,0,0.25)");
-      ctx.fillStyle = depthGrad;
-      ctx.fill();
-
-      ctx.restore();
-
-      // Leading edge highlight
+      // Thin separator between slices
       ctx.beginPath();
       ctx.moveTo(center, center);
       ctx.lineTo(
         center + Math.cos(startAngle) * radius,
         center + Math.sin(startAngle) * radius
       );
-      ctx.strokeStyle = "rgba(255,255,255,0.45)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Trailing edge shadow
-      ctx.beginPath();
-      ctx.moveTo(center, center);
-      ctx.lineTo(
-        center + Math.cos(endAngle) * radius,
-        center + Math.sin(endAngle) * radius
-      );
-      ctx.strokeStyle = "rgba(0,0,0,0.35)";
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.lineWidth = 1;
       ctx.stroke();
 
       // Label
@@ -168,69 +112,31 @@ export function WheelOfPain({ contestants, onResult, onClose, inline }: WheelOfP
       ctx.rotate(midAngle);
       ctx.textAlign = "right";
       const isSafe = !slice.playerId;
-      // Text shadow for depth
-      ctx.shadowColor = isSafe ? "rgba(0,0,0,0.3)" : "rgba(0,0,0,0.8)";
-      ctx.shadowBlur = 3;
-      ctx.shadowOffsetY = 1;
       ctx.fillStyle = isSafe ? "#1a1a2e" : "white";
       ctx.font = `bold ${Math.min(20, 280 / slices.length)}px sans-serif`;
       ctx.fillText(slice.label, radius - 18, 5);
       ctx.restore();
     });
 
-    // Global top-light overlay for cohesive 3D
-    const rimGrad = ctx.createLinearGradient(center, center - radius, center, center + radius);
-    rimGrad.addColorStop(0, "rgba(255,255,255,0.12)");
-    rimGrad.addColorStop(0.4, "rgba(255,255,255,0)");
-    rimGrad.addColorStop(0.6, "rgba(0,0,0,0)");
-    rimGrad.addColorStop(1, "rgba(0,0,0,0.18)");
-    ctx.beginPath();
-    ctx.arc(center, center, radius, 0, 2 * Math.PI);
-    ctx.fillStyle = rimGrad;
-    ctx.fill();
-
-    // Center hub — 3D dome
-    const hubRadius = 24;
-    const hubGrad = ctx.createRadialGradient(
-      center - 4, center - 4, 2,
-      center, center, hubRadius
-    );
-    hubGrad.addColorStop(0, "#3b3666");
-    hubGrad.addColorStop(0.6, "#1e1b4b");
-    hubGrad.addColorStop(1, "#0f0d2e");
+    // Flat hub
+    const hubRadius = 18;
     ctx.beginPath();
     ctx.arc(center, center, hubRadius, 0, 2 * Math.PI);
-    ctx.fillStyle = hubGrad;
+    ctx.fillStyle = "#1a1a2e";
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.strokeStyle = accent;
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Skull icon in center
-    ctx.fillStyle = "rgba(239,68,68,0.8)";
-    ctx.font = "16px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("\u2620", center, center);
-
-    // Pointer (top) — more prominent
-    ctx.shadowColor = "rgba(0,0,0,0.5)";
-    ctx.shadowBlur = 6;
+    // Pointer (top)
     ctx.beginPath();
     ctx.moveTo(center - 14, 2);
     ctx.lineTo(center + 14, 2);
     ctx.lineTo(center, 28);
     ctx.closePath();
-    const pointerGrad = ctx.createLinearGradient(center, 2, center, 28);
-    pointerGrad.addColorStop(0, "#ff2222");
-    pointerGrad.addColorStop(1, "#aa0000");
-    ctx.fillStyle = pointerGrad;
+    ctx.fillStyle = accent;
     ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(255,255,255,0.5)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }, [slices, sliceAngle]);
+  }, [slices, sliceAngle, accent]);
 
   const getWinningSlice = useCallback(() => {
     // The pointer is at the top (angle = -PI/2 = 3PI/2)
@@ -251,20 +157,22 @@ export function WheelOfPain({ contestants, onResult, onClose, inline }: WheelOfP
 
     if (velocityRef.current < 0.001) {
       spinningRef.current = false;
-      setSpinning(false);
 
-      const winner = getWinningSlice();
-      if (winner) {
-        setResult(winner.label);
-        if (winner.playerId) {
-          // Player lost - play booing sound
+      const winningSlice = getWinningSlice();
+      if (winningSlice) {
+        setResult(winningSlice.label);
+        if (winningSlice.playerId) {
+          // Show the winner card and play the booing sound at the same
+          // time. Notify the parent immediately so the production state
+          // can advance, but keep the overlay visible until the host
+          // moves on (phase change will unmount this component).
+          setWinner({ name: winningSlice.label, color: winningSlice.color });
           booingRef.current = new Audio("/sounds/booing.mp3");
           booingRef.current.play().catch(() => {});
-          setTimeout(() => onResult(winner.playerId!), 2000);
-        } else {
-          // SAFE - auto close after delay
-          setTimeout(() => onClose(), 2000);
+          onResult(winningSlice.playerId);
         }
+        // SAFE — fall through and let the parent (host) advance. The popup
+        // is rendered from `result === "SAFE"` below.
       }
       return;
     }
@@ -275,9 +183,9 @@ export function WheelOfPain({ contestants, onResult, onClose, inline }: WheelOfP
   const spin = useCallback(() => {
     if (spinningRef.current) return;
     setResult(null);
+    setWinner(null);
     velocityRef.current = 0.2 + Math.random() * 0.3;
     spinningRef.current = true;
-    setSpinning(true);
     animate();
   }, [animate]);
 
@@ -294,11 +202,23 @@ export function WheelOfPain({ contestants, onResult, onClose, inline }: WheelOfP
     };
   }, []);
 
-  // Auto-spin after mount
+  // Keep spin reachable from the auto-spin effect without making it a dep
+  // (spin's identity changes every render because slices/animate rebuild).
+  const spinRef = useRef(spin);
+  spinRef.current = spin;
+
+  // Auto-spin once after mount when allowed. The ref guard is set *inside*
+  // the timer callback so that StrictMode's double-invoke (dev) doesn't
+  // skip-then-cancel the only scheduled spin.
   useEffect(() => {
-    const timer = setTimeout(spin, 500);
+    if (!autoSpin) return;
+    if (hasAutoSpunRef.current) return;
+    const timer = setTimeout(() => {
+      hasAutoSpunRef.current = true;
+      spinRef.current();
+    }, 500);
     return () => clearTimeout(timer);
-  }, [spin]);
+  }, [autoSpin]);
 
   if (inline) {
     return (
@@ -324,37 +244,102 @@ export function WheelOfPain({ contestants, onResult, onClose, inline }: WheelOfP
     );
   }
 
+  // `absolute inset-0` (vs `fixed`) so the wheel stays inside the parent
+  // shell — covers the full TV viewport in production, stays inside the
+  // mockup frame in the dashboard preview.
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center">
-      <h2 className="text-3xl font-bold text-white mb-6">
-        Pay The Price!
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center px-8">
+      <h2
+        className="text-7xl font-bold mb-8 tracking-[-0.025em] text-center"
+        style={{
+          color: accent,
+          fontFamily: headingFontFamily,
+        }}
+      >
+        Pay the Price Penalty Wheel
       </h2>
 
-      <canvas
-        ref={canvasRef}
-        width={400}
-        height={400}
-        className="max-w-[90vw] max-h-[90vw]"
-      />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={400}
+          height={400}
+          className="max-w-[60cqmin] max-h-[60cqmin]"
+        />
 
-      {result && (
-        <div className="mt-6 text-center">
-          <p className={`text-3xl font-bold ${
-            result === "SAFE" ? "text-green-400" : "text-red-400"
-          }`}>
-            {result === "SAFE" ? "SAFE!" : `${result} pays the price!`}
-          </p>
+        {/* Winner card — pops in the moment the wheel stops on a player and
+            plays booing simultaneously. Stays visible until the host moves
+            on to the next item (phase change unmounts the wheel). */}
+        {winner && (
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            style={{
+              animation: "wheelWinnerIn 0.5s cubic-bezier(0.22, 1.2, 0.36, 1) both",
+            }}
+          >
+            <div
+              className="bg-white rounded-3xl px-16 py-10 text-center shadow-[0_24px_60px_-12px_rgba(0,0,0,0.55)] flex flex-col items-center gap-6"
+              style={{ border: `4px solid ${accent}` }}
+            >
+              <p
+                className="text-xl font-bold uppercase tracking-[0.3em]"
+                style={{ color: accent }}
+              >
+                Pays the Price
+              </p>
+              <PlayerCardIcon color={winner.color} className="w-56 h-auto" />
+              <p
+                className="text-7xl font-bold tracking-[-0.025em] text-[#1a1a2e]"
+                style={{ fontFamily: headingFontFamily }}
+              >
+                {winner.name}
+              </p>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* SAFE card — themed celebration when the wheel lands on the SAFE
+          wedge. Full-screen blurred overlay sits above the wheel until the
+          host advances (phase change unmounts the wheel). */}
+      {result === "SAFE" && !winner && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 backdrop-blur-md"
+          style={{
+            animation: "wheelWinnerIn 0.5s cubic-bezier(0.22, 1.2, 0.36, 1) both",
+          }}
+        >
+          <div
+            className="rounded-[2rem] px-28 py-20 text-center shadow-[0_32px_80px_-12px_rgba(0,0,0,0.6)] flex flex-col items-center gap-6"
+            style={{
+              background: theme.surface,
+              border: `4px solid ${accent}`,
+            }}
+          >
+            <p
+              className="text-8xl font-bold tracking-[-0.025em]"
+              style={{ color: theme.textPrimary, fontFamily: headingFontFamily }}
+            >
+              Congrats!
+            </p>
+            <p
+              className="text-6xl font-bold tracking-[-0.02em]"
+              style={{ color: accent, fontFamily: headingFontFamily }}
+            >
+              Everyone&apos;s Safe!
+            </p>
+          </div>
         </div>
       )}
 
-      {!spinning && !result && (
-        <button
-          onClick={spin}
-          className="mt-6 px-8 py-3 bg-red-500 text-white rounded-full text-lg font-bold hover:bg-red-600 transition"
-        >
-          SPIN
-        </button>
-      )}
+      <style>{`
+        @keyframes wheelWinnerIn {
+          0%   { opacity: 0; transform: scale(0.4); }
+          60%  { opacity: 1; transform: scale(1.08); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }

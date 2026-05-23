@@ -8,6 +8,15 @@ import { AVATAR_COLORS } from "@/lib/avatar-colors";
 import { useGameTheme } from "@/lib/theme-context";
 import { getFontFamily, getGoogleFontsUrl } from "@/lib/theme-fonts";
 import { getPatternBg } from "@/lib/theme-patterns";
+import {
+  getCardCss,
+  getButtonCss,
+  getButtonInnerCss,
+  getButtonTextStyle,
+  getShellCss,
+  getHeadingCss,
+} from "@/lib/theme-styles";
+import { GamePausedOverlay } from "@/components/games/GamePausedOverlay";
 import type {
   Session,
   SessionPlayer,
@@ -18,31 +27,40 @@ import type {
 
 // ─── Themed shell + helpers — mirrors TCHM's BankShell so every phase
 // fits the player frame without scroll. ────────────────────────────────
-function TriviaShell({ children, t }: { children: React.ReactNode; t: GameTheme }) {
+function TriviaShell({ children, t, paused = false }: { children: React.ReactNode; t: GameTheme; paused?: boolean }) {
   const fontsUrl = getGoogleFontsUrl([t.headingFont, t.bodyFont]);
   const headingFontCss = getFontFamily(t.headingFont);
   const patternBg = getPatternBg(t.pattern, t.accent);
+  const styleShell = getShellCss(t);
+  const headingExtra = getHeadingCss(t);
+  const shellBgImage = patternBg && styleShell.backgroundImage
+    ? `${patternBg}, ${styleShell.backgroundImage}`
+    : (patternBg ?? styleShell.backgroundImage);
   return (
     <div
-      className="min-h-full h-full flex flex-col trivia-shell overflow-x-hidden"
+      className="min-h-full h-full flex flex-col trivia-shell overflow-x-hidden relative"
       style={{
         backgroundColor: t.bg,
-        backgroundImage: patternBg ?? undefined,
-        backgroundRepeat: patternBg ? "repeat" : undefined,
+        ...styleShell,
+        backgroundImage: shellBgImage,
+        backgroundRepeat: shellBgImage ? "repeat" : undefined,
         color: t.textPrimary,
         fontFamily: getFontFamily(t.bodyFont),
       }}
     >
       {fontsUrl && <link rel="stylesheet" href={fontsUrl} />}
       <style>{`
-        .trivia-shell h1,.trivia-shell h2,.trivia-shell h3{
+        .trivia-shell h1,.trivia-shell h2,.trivia-shell h3,.trivia-shell h4,.trivia-shell h5,.trivia-shell h6{
+          color:inherit;
           font-family:${headingFontCss};
-          letter-spacing:-0.02em;
+          letter-spacing:${(headingExtra.letterSpacing as string) ?? "-0.02em"};
           line-height:1.05;
+          text-transform:${(headingExtra.textTransform as string) ?? "none"};
         }
         .trivia-shell input::placeholder{color:${t.textDim}}
       `}</style>
       {children}
+      {paused && <GamePausedOverlay />}
     </div>
   );
 }
@@ -59,16 +77,7 @@ function TriviaCard({
   t: GameTheme;
 }) {
   return (
-    <div
-      className={`rounded-3xl p-4 overflow-hidden ${className}`}
-      style={{
-        background: t.surface,
-        border: `1.5px solid color-mix(in srgb, ${t.textPrimary} 18%, transparent)`,
-        boxShadow: glow
-          ? `0 0 30px ${t.accentDim}`
-          : `0 8px 24px -16px rgba(0,0,0,0.45)`,
-      }}
-    >
+    <div className={`p-4 ${className}`} style={getCardCss(t, { glow })}>
       {children}
     </div>
   );
@@ -92,31 +101,26 @@ function TriviaButton({
   t: GameTheme;
 }) {
   const base =
-    "w-full py-3.5 rounded-full font-display font-semibold text-[16px] tracking-[-0.01em] transition-[filter,transform,background] duration-200 flex items-center justify-center gap-2 active:scale-[0.98] hover:brightness-95";
-  const buttonTextColor = t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A";
-  const inkBorder = `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`;
-  const variantStyles: Record<string, React.CSSProperties> = {
-    primary: { background: t.accent, color: buttonTextColor, border: inkBorder },
-    ghost: {
-      background: "transparent",
-      border: `1.5px solid color-mix(in srgb, ${t.textPrimary} 25%, transparent)`,
-      color: t.textPrimary,
-    },
-  };
+    "w-full py-3.5 text-[16px] transition-[filter,transform,background] duration-200 flex items-center justify-center gap-2 active:scale-[0.98] hover:brightness-95";
+  const css = getButtonCss(t, { variant });
+  const textCss = getButtonTextStyle(t);
+  const innerCss = getButtonInnerCss(t);
   return (
     <button
       onClick={onClick}
       disabled={disabled || loading}
       className={`${base} disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
-      style={variantStyles[variant]}
+      style={{ ...css, ...textCss, fontFamily: getFontFamily(t.headingFont) }}
     >
-      {loading && (
-        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-      )}
-      {children}
+      <span style={innerCss} className="inline-flex items-center gap-2">
+        {loading && (
+          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        )}
+        {children}
+      </span>
     </button>
   );
 }
@@ -139,7 +143,7 @@ function AvatarBubble({ player, size = 64 }: { player: SessionPlayer; size?: num
         height: size,
         backgroundColor: player.avatar_color,
         fontSize: size * 0.4,
-        border: "2px solid color-mix(in srgb, currentColor 20%, transparent)",
+        border: "2px solid rgba(255,255,255,0.5)",
       }}
     >
       {player.display_name.charAt(0).toUpperCase()}
@@ -170,6 +174,7 @@ export interface TriviaPlayerDevMode {
   timeLeft?: number;
   answerResult?: { correct: boolean; points: number } | null;
   error?: string;
+  gameName?: string;
 }
 
 export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode: string; devMode?: TriviaPlayerDevMode }) {
@@ -185,9 +190,29 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(devMode?.selectedChoiceId ?? null);
   const [timeLeft, setTimeLeft] = useState(devMode?.timeLeft ?? 0);
   const [displayName, setDisplayName] = useState("");
-  const [avatarColor, setAvatarColor] = useState<string>(AVATAR_COLORS[0]);
+  const palette = t.playerColors && t.playerColors.length > 0 ? t.playerColors : AVATAR_COLORS;
+  const [avatarColor, setAvatarColor] = useState<string>(palette[0]);
   const [error, setError] = useState(devMode?.error || "");
   const [joinLoading, setJoinLoading] = useState(false);
+  const [gameName, setGameName] = useState(devMode?.gameName ?? "");
+
+  // Measure the joining body width so the layout responds to the FRAME (dev
+  // preview) rather than the browser viewport.
+  const [joiningWidth, setJoiningWidth] = useState(0);
+  const joiningRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const measure = () => setJoiningWidth(node.getBoundingClientRect().width);
+    measure();
+    requestAnimationFrame(measure);
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) setJoiningWidth(e.contentRect.width);
+    });
+    ro.observe(node);
+    // Stash the observer so it can be cleaned up later if needed
+    (node as unknown as { __ro?: ResizeObserver }).__ro = ro;
+  }, []);
+  const cardCols = joiningWidth >= 896 ? "grid-cols-6" : joiningWidth >= 448 ? "grid-cols-4" : "grid-cols-3";
+  const inputPadY = joiningWidth >= 448 ? "py-3" : "py-1.5";
   const [answerResult, setAnswerResult] = useState<{
     correct: boolean;
     points: number;
@@ -212,6 +237,15 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
       }
 
       setSession(data);
+
+      if (data.game_id) {
+        const { data: gameData } = await supabase
+          .from("games")
+          .select("title")
+          .eq("id", data.game_id)
+          .maybeSingle();
+        if (gameData?.title) setGameName(gameData.title);
+      }
 
       const { data: playersData } = await supabase
         .from("session_players")
@@ -403,18 +437,29 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
 
   const handleAnswer = useCallback(
     async (choiceId: string) => {
-      if (devMode) return;
-      if (!session || !player || !questionState || !currentQuestion || selectedChoiceId) return;
+      if (!session || !player || !questionState || !currentQuestion) return;
+      // Host-locked or paused: no input.
+      if (questionState.is_locked || questionState.is_paused) return;
+      // Speed bonus locks first selection (prod only — in dev preview we
+      // always allow toggling so the screen is testable).
+      if (session.speed_bonus && selectedChoiceId && !devMode) return;
+      if (selectedChoiceId === choiceId) return;
 
       setSelectedChoiceId(choiceId);
-      setPhase("answered");
+      if (session.speed_bonus && !devMode) setPhase("answered");
+
+      const choice = currentQuestion.game_question_choices.find((c) => c.id === choiceId);
+      const isCorrect = choice?.is_correct || false;
+
+      // Dev preview: visual feedback only, no DB.
+      if (devMode) {
+        setAnswerResult({ correct: isCorrect, points: isCorrect ? 1000 : 0 });
+        return;
+      }
 
       const supabase = createClient();
       const startedAt = questionState.started_at ? new Date(questionState.started_at).getTime() : Date.now();
       const timeMs = Date.now() - startedAt;
-
-      const choice = currentQuestion.game_question_choices.find((c) => c.id === choiceId);
-      const isCorrect = choice?.is_correct || false;
 
       let points = 0;
       if (isCorrect) {
@@ -428,6 +473,16 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
 
       setAnswerResult({ correct: isCorrect, points });
 
+      // For non-speed-bonus mode the user can change their answer.
+      // Replace any prior answer for this player+question, then insert.
+      if (!session.speed_bonus) {
+        await supabase
+          .from("session_answers")
+          .delete()
+          .eq("session_id", session.id)
+          .eq("player_id", player.id)
+          .eq("question_id", questionState.question_id);
+      }
       await supabase.from("session_answers").insert({
         session_id: session.id,
         player_id: player.id,
@@ -438,15 +493,15 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
         points_awarded: points,
       });
     },
-    [session, player, questionState, currentQuestion, selectedChoiceId]
+    [session, player, questionState, currentQuestion, selectedChoiceId, devMode]
   );
 
   const buttonTextColor = t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A";
 
   if (phase === "error") {
     return (
-      <TriviaShell t={t}>
-        <div className="flex-1 flex flex-col items-center justify-center px-5">
+      <TriviaShell t={t} paused={!!session?.is_paused}>
+        <div className="flex-1 flex flex-col items-center justify-center px-8">
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
             style={{ background: "rgba(185,28,28,0.12)" }}
@@ -467,8 +522,8 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
 
   if (phase === "removed") {
     return (
-      <TriviaShell t={t}>
-        <div className="flex-1 flex flex-col items-center justify-center px-5">
+      <TriviaShell t={t} paused={!!session?.is_paused}>
+        <div className="flex-1 flex flex-col items-center justify-center px-8">
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
             style={{ background: "rgba(185,28,28,0.12)" }}
@@ -502,81 +557,132 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
 
   if (phase === "joining") {
     return (
-      <TriviaShell t={t}>
-        <div className="flex-1 flex flex-col justify-center px-4 py-3">
-          {/* Game Code chip */}
-          <div className="relative mb-3">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-              <div
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-full"
-                style={{ background: t.bg, border: `1px solid ${t.accent}` }}
+      <TriviaShell t={t} paused={!!session?.is_paused}>
+        {devMode && (
+          <div className="absolute top-1 right-1 z-20 text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/60 text-white pointer-events-none">
+            w:{Math.round(joiningWidth)} cols:{cardCols.replace("grid-cols-", "")}
+          </div>
+        )}
+        <div
+          ref={joiningRef}
+          className="flex-1 flex flex-col px-8 pt-7 pb-8 min-h-0"
+        >
+          {/* ── Top region: Game Code badge + thumbnail ── */}
+          <div className="shrink-0 flex flex-col gap-2">
+            <div className="flex w-full items-center justify-center gap-2">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke={t.accent} strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              <span
+                className="font-bold text-[10px] uppercase tracking-wider tabular-nums"
+                style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
               >
-                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke={t.accent} strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-                <span className="font-mono font-bold text-xs tracking-[0.15em]" style={{ color: t.accent }}>
-                  {sessionCode}
-                </span>
+                Game Code: {sessionCode}
+              </span>
+            </div>
+
+            <TriviaCard t={t} className="!p-0 overflow-hidden w-full">
+              <div
+                className="flex flex-col items-center justify-center text-center px-4 py-5"
+                style={{ background: `linear-gradient(135deg, ${t.accent} 0%, color-mix(in srgb, ${t.accent} 70%, ${t.textPrimary}) 100%)` }}
+              >
+                {(() => {
+                  const isDark = t.mode === "dark";
+                  const titleFill = isDark ? t.bg : "#FFFFFF";
+                  const shadowColor = isDark ? "#FFFFFF" : t.textPrimary;
+                  return (
+                    <>
+                      <h1
+                        className="font-bold text-[26px] tracking-[-0.03em] leading-[1.05]"
+                        style={{ color: titleFill, textShadow: `0 2px 10px ${shadowColor}33` }}
+                      >
+                        Straight Off The Dome
+                      </h1>
+                      {gameName && (
+                        <p
+                          className="text-[13px] font-semibold mt-2 leading-snug"
+                          style={{ color: titleFill, textShadow: `0 1px 4px ${shadowColor}66` }}
+                        >
+                          {gameName} Edition
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </TriviaCard>
+          </div>
+
+          {/* ── Body: name + color picker, vertically centered ── */}
+          <div className="flex-1 flex flex-col justify-center gap-7 min-h-0 py-4">
+            <div className="w-full max-w-md mx-auto">
+              <label className="block text-[10px] font-medium mb-1.5 uppercase tracking-wider text-center" style={{ color: t.textMuted }}>
+                Player Name
+              </label>
+              <input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Enter your name"
+                maxLength={20}
+                autoFocus
+                className={`w-full text-sm font-bold text-center focus:outline-none px-3 ${inputPadY}`}
+                style={{
+                  ...getCardCss(t),
+                  color: t.textPrimary,
+                  caretColor: t.accent,
+                }}
+              />
+            </div>
+
+            <div className="flex flex-col">
+              <p className="block text-[10px] font-medium mb-1.5 uppercase tracking-wider text-center" style={{ color: t.textMuted }}>
+                Pick a Color
+              </p>
+              <div className={`grid ${cardCols} gap-2.5 w-[70%] mx-auto`}>
+                {palette.map((color) => {
+                  const selected = avatarColor === color;
+                  return (
+                    <button
+                      key={color}
+                      onClick={() => setAvatarColor(color)}
+                      className={`aspect-square rounded-full transition-all duration-200 relative ${selected ? "scale-100" : "scale-[0.85]"}`}
+                      style={{ backgroundColor: color, border: "2px solid rgba(255,255,255,0.5)" }}
+                    >
+                      {selected && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center"
+                            style={{
+                              background: t.accent,
+                              border: `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`,
+                              color: t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A",
+                            }}
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <div
-              className="rounded-2xl overflow-hidden pt-4 pb-3 px-4 text-center"
-              style={{ border: `1px solid color-mix(in srgb, ${t.textPrimary} 18%, transparent)`, background: t.surface }}
-            >
-              <h1 className="text-xl font-bold mb-1">Straight Off The Dome</h1>
-              <p className="text-[12px]" style={{ color: t.textMuted }}>Trivia, no warm-up.</p>
-            </div>
+
+            {error && (
+              <p className="text-xs text-center font-medium" style={{ color: t.danger }}>
+                {error}
+              </p>
+            )}
           </div>
 
-          {/* Name Input */}
-          <TriviaCard t={t} className="!p-3 mb-3">
-            <label className="block text-[10px] font-medium mb-1 uppercase tracking-wider text-center" style={{ color: t.textDim }}>
-              Player Name
-            </label>
-            <input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Enter your name"
-              maxLength={20}
-              autoFocus
-              className="w-full bg-transparent text-lg font-bold text-center focus:outline-none"
-              style={{ color: t.textPrimary, caretColor: t.accent }}
-            />
-          </TriviaCard>
-
-          {/* Color picker */}
-          <div className="flex flex-col mb-3">
-            <h2 className="text-sm font-bold text-center mb-2">Pick a Color</h2>
-            <div className="grid grid-cols-8 gap-1.5">
-              {AVATAR_COLORS.map((color) => {
-                const selected = avatarColor === color;
-                return (
-                  <button
-                    key={color}
-                    onClick={() => setAvatarColor(color)}
-                    className="aspect-square rounded-full transition-all relative"
-                    style={{
-                      backgroundColor: color,
-                      border: selected
-                        ? `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`
-                        : "2px solid transparent",
-                      boxShadow: selected ? `0 0 0 2px ${t.bg}, 0 0 0 4px ${t.accent}` : "none",
-                    }}
-                  />
-                );
-              })}
-            </div>
+          {/* ── Bottom region: Join button anchored ── */}
+          <div className="shrink-0 w-full max-w-md mx-auto">
+            <TriviaButton t={t} onClick={handleJoin} loading={joinLoading}>
+              Join Game
+            </TriviaButton>
           </div>
-
-          {error && (
-            <p className="text-xs text-center font-medium mb-2" style={{ color: t.danger }}>
-              {error}
-            </p>
-          )}
-
-          <TriviaButton t={t} onClick={handleJoin} loading={joinLoading}>
-            Join Game
-          </TriviaButton>
         </div>
       </TriviaShell>
     );
@@ -585,9 +691,9 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
   if (phase === "lobby" || (session.status === "lobby" && player)) {
     const others = players.filter((p) => p.id !== player?.id);
     return (
-      <TriviaShell t={t}>
+      <TriviaShell t={t} paused={!!session?.is_paused}>
         {/* Greeting Header */}
-        <div className="px-5 pt-6 pb-4 flex items-center justify-between">
+        <div className="p-8 pb-[10px] flex items-center justify-between shrink-0">
           <div className="min-w-0">
             <p className="text-sm" style={{ color: t.textMuted }}>Welcome!</p>
             <h1 className="text-2xl font-bold truncate">{player?.display_name}</h1>
@@ -598,24 +704,29 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
           </div>
         </div>
 
-        <div className="flex-1 px-5 pb-5 flex flex-col gap-4 overflow-y-auto">
-          {/* Player card */}
+        <div className="flex-1 px-8 pb-5 flex flex-col gap-4 min-h-0">
+          {/* Player card — avatar + game name + edition */}
           {player && (
-            <TriviaCard t={t} glow className="flex items-center gap-4">
+            <TriviaCard t={t} glow className="flex items-center gap-4 shrink-0">
               <AvatarBubble player={player} size={64} />
               <div className="flex-1 min-w-0">
-                <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: t.textDim }}>
-                  Game Code
+                <p
+                  className="text-base font-bold leading-tight"
+                  style={{ fontFamily: getFontFamily(t.headingFont) }}
+                >
+                  Straight Off The Dome
                 </p>
-                <p className="text-2xl font-bold font-mono tracking-[0.15em]" style={{ color: t.accent }}>
-                  {sessionCode}
-                </p>
+                {gameName && (
+                  <p className="text-[12px] mt-0.5" style={{ color: t.textMuted }}>
+                    {gameName} Edition
+                  </p>
+                )}
               </div>
             </TriviaCard>
           )}
 
           {/* Player list */}
-          <div>
+          <div className="shrink-0">
             <div className="flex items-center justify-between mb-2 px-1">
               <h3 className="text-sm font-bold">Players</h3>
               <span className="text-xs font-medium" style={{ color: t.textMuted }}>
@@ -628,7 +739,7 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
                   <span
                     key={p.id}
                     className="px-2.5 py-1 rounded-full text-xs font-semibold text-white"
-                    style={{ backgroundColor: p.avatar_color }}
+                    style={{ backgroundColor: p.avatar_color, border: "2px solid rgba(255,255,255,0.5)" }}
                   >
                     {p.display_name}
                   </span>
@@ -642,9 +753,40 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
             </TriviaCard>
           </div>
 
+          {/* How to Play — fills remaining space, scrolls internally */}
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div className="flex items-center justify-between mb-2 px-1 shrink-0">
+              <h3 className="text-sm font-bold">How to Play</h3>
+            </div>
+            <TriviaCard t={t} className="!p-4 flex-1 min-h-0 overflow-y-auto">
+              <ol className="space-y-3">
+                {[
+                  { step: "1", title: "Read the question", desc: "A question pops up with multiple choice answers." },
+                  { step: "2", title: "Lock in your pick", desc: "Tap your answer before the timer runs out." },
+                  { step: "3", title: "Speed counts", desc: "If speed bonus is on, the faster you get it right, the more points you earn." },
+                  { step: "4", title: "See the result", desc: "After the host reveals, you'll see the correct answer and your points." },
+                  { step: "5", title: "Climb the board", desc: "Track your standing on the leaderboard between rounds." },
+                ].map(({ step, title, desc }) => (
+                  <li key={step} className="flex gap-3">
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{ background: t.accentDim, color: t.accent }}
+                    >
+                      {step}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold mb-0.5">{title}</p>
+                      <p className="text-xs" style={{ color: t.textMuted }}>{desc}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </TriviaCard>
+          </div>
+
           {/* Waiting Indicator */}
           <div
-            className="flex items-center justify-center gap-3 py-3 rounded-2xl mt-auto shrink-0"
+            className="flex items-center justify-center gap-3 py-3 rounded-2xl shrink-0"
             style={{ background: t.accentDim }}
           >
             <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
@@ -657,62 +799,113 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
     );
   }
 
-  if ((phase === "question" || phase === "answered") && currentQuestion && questionState) {
+  if ((phase === "question" || phase === "answered" || phase === "results") && currentQuestion && questionState) {
     const choices = currentQuestion.game_question_choices;
-    const choiceColors = ["#EF4444", "#3B82F6", "#F59E0B", "#10B981", "#8B5CF6"];
     const choiceLetters = ["A", "B", "C", "D", "E"];
-    const isLocked = questionState.is_locked || questionState.is_paused || !!selectedChoiceId;
+    const isResults = phase === "results";
+    const speedBonus = !!session?.speed_bonus;
+    const isLocked = questionState.is_locked || questionState.is_paused || (speedBonus && !!selectedChoiceId && !devMode) || isResults;
+    const isCorrect = answerResult?.correct;
+    const correctColor = "#15803D";
     return (
-      <TriviaShell t={t}>
+      <TriviaShell t={t} paused={!!session?.is_paused}>
         {/* Top bar */}
-        <div className="px-5 pt-5 pb-3 flex items-center justify-between shrink-0">
+        <div className="px-8 pt-5 pb-3 flex items-center justify-between shrink-0">
           <div
             className="px-3 py-1 rounded-lg text-sm font-bold"
             style={{ background: t.accentDim, color: t.accent }}
           >
             Question {questionState.question_index + 1}
           </div>
-          <div
-            className="text-2xl font-bold tabular-nums"
-            style={{ color: timeLeft <= 5 ? t.danger : t.textPrimary, fontFamily: getFontFamily(t.headingFont) }}
-          >
-            {questionState.is_paused ? "PAUSED" : `${timeLeft}s`}
-          </div>
+          {isResults ? (
+            <div
+              className="px-3 py-1 rounded-lg text-sm font-bold"
+              style={{
+                background: isCorrect ? `${correctColor}22` : `${t.danger}22`,
+                color: isCorrect ? correctColor : t.danger,
+              }}
+            >
+              {isCorrect ? `Correct +${answerResult?.points}` : "Wrong"}
+            </div>
+          ) : (
+            <div
+              className="text-2xl font-bold tabular-nums"
+              style={{ color: timeLeft <= 5 ? t.danger : t.textPrimary, fontFamily: getFontFamily(t.headingFont) }}
+            >
+              {questionState.is_paused ? "PAUSED" : `${timeLeft}s`}
+            </div>
+          )}
         </div>
 
-        <div className="flex-1 min-h-0 px-4 pb-4 flex flex-col gap-3">
+        <div className="flex-1 min-h-0 px-8 pb-4 flex flex-col gap-3">
           {/* Prompt */}
-          <TriviaCard t={t} glow className="text-center !p-4 shrink-0">
-            <p className="text-lg font-bold leading-tight">{currentQuestion.prompt}</p>
+          <TriviaCard t={t} glow className="text-center !p-5 shrink-0">
+            <p className="text-2xl font-bold leading-tight">{currentQuestion.prompt}</p>
           </TriviaCard>
 
-          {/* Choices fill remaining space */}
-          <div className="flex-1 min-h-0 flex flex-col gap-2.5">
+          {/* Choices */}
+          <div className="flex flex-col gap-2">
             {choices.map((choice, idx) => {
-              const color = choiceColors[idx] || t.accent;
               const isMe = selectedChoiceId === choice.id;
+              const isCorrectChoice = !!choice.is_correct;
+              const inkColor = t.textPrimary;
+
+              // Default state — light themed box (Q-counter pill scaled up)
+              let bg: string = t.surface;
+              let border: string = `1.5px solid color-mix(in srgb, ${inkColor} 14%, transparent)`;
+              let textColor: string = t.textPrimary;
+              let iconBg = `color-mix(in srgb, ${inkColor} 8%, transparent)`;
+              let iconColor: string = t.textPrimary;
+
+              if (isResults) {
+                if (isCorrectChoice) {
+                  bg = `${correctColor}1F`;
+                  border = `1.5px solid ${correctColor}`;
+                  textColor = correctColor;
+                  iconBg = `${correctColor}33`;
+                  iconColor = correctColor;
+                } else if (isMe) {
+                  bg = `${t.danger}1F`;
+                  border = `1.5px solid ${t.danger}`;
+                  textColor = t.danger;
+                  iconBg = `${t.danger}33`;
+                  iconColor = t.danger;
+                } else {
+                  // dim non-selected, non-correct
+                  bg = "transparent";
+                }
+              } else if (isMe) {
+                // Active selection in question/answered
+                bg = t.accent;
+                border = `2px solid color-mix(in srgb, ${inkColor} 90%, transparent)`;
+                textColor = t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A";
+                iconBg = "rgba(255,255,255,0.28)";
+                iconColor = textColor;
+              }
+
               return (
                 <button
                   key={choice.id}
                   onClick={() => handleAnswer(choice.id)}
-                  disabled={isLocked}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-white font-semibold text-base transition-all disabled:opacity-60 active:scale-[0.98] hover:brightness-95 flex-1 min-h-0"
-                  style={{
-                    background: color,
-                    border: `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`,
-                    boxShadow: isMe ? `0 0 0 3px ${t.accent}` : "none",
-                  }}
+                  disabled={isLocked && !isMe}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl font-semibold text-sm transition-all disabled:opacity-60 active:scale-[0.98]"
+                  style={{ background: bg, border, color: textColor }}
                 >
                   <span
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                    style={{ background: "rgba(255,255,255,0.25)", border: "1.5px solid rgba(255,255,255,0.5)" }}
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                    style={{ background: iconBg, color: iconColor }}
                   >
                     {choiceLetters[idx]}
                   </span>
                   <span className="flex-1 text-left">{choice.choice_text}</span>
-                  {isMe && (
+                  {isResults && isCorrectChoice && (
                     <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {isResults && !isCorrectChoice && isMe && (
+                    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   )}
                 </button>
@@ -720,7 +913,16 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
             })}
           </div>
 
-          {phase === "answered" && (
+          {/* Footer status */}
+          {isResults ? (
+            <div
+              className="flex items-center justify-center gap-2 py-2 rounded-full shrink-0"
+              style={{ background: t.accentDim }}
+            >
+              <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
+              <span className="text-xs font-medium" style={{ color: t.accent }}>Waiting for next question…</span>
+            </div>
+          ) : speedBonus && phase === "answered" ? (
             <div
               className="flex items-center justify-center gap-2 py-2 rounded-full shrink-0"
               style={{ background: t.accentDim }}
@@ -730,68 +932,16 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
                 Locked in — waiting for reveal…
               </span>
             </div>
-          )}
-        </div>
-      </TriviaShell>
-    );
-  }
-
-  if (phase === "results" && questionState && currentQuestion) {
-    const correctChoice = currentQuestion.game_question_choices.find((c) => c.is_correct);
-    const correctColor = "#15803D";
-    const isCorrect = answerResult?.correct;
-    return (
-      <TriviaShell t={t}>
-        <div className="flex-1 px-5 py-6 flex flex-col items-center justify-center gap-4">
-          <TriviaCard t={t} glow className="w-full text-center">
-            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: t.textDim }}>
-              Correct Answer
-            </p>
-            <p
-              className="text-3xl font-bold tracking-[-0.025em]"
-              style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
+          ) : selectedChoiceId ? (
+            <div
+              className="flex items-center justify-center gap-2 py-2 rounded-full shrink-0"
+              style={{ background: t.accentDim }}
             >
-              {correctChoice?.choice_text}
-            </p>
-          </TriviaCard>
-
-          {answerResult && (
-            <TriviaCard t={t} className="w-full">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wider" style={{ color: t.textDim }}>
-                  Your Result
-                </span>
-                <span
-                  className="text-lg font-bold"
-                  style={{ color: isCorrect ? correctColor : t.danger }}
-                >
-                  {isCorrect ? "Correct!" : "Wrong"}
-                </span>
-              </div>
-              {answerResult.points > 0 && (
-                <div
-                  className="rounded-xl mt-3 py-3 text-center"
-                  style={{ background: t.surfaceLight }}
-                >
-                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: t.textDim }}>Points Earned</p>
-                  <p
-                    className="text-2xl font-bold tabular-nums"
-                    style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
-                  >
-                    +{answerResult.points}
-                  </p>
-                </div>
-              )}
-            </TriviaCard>
-          )}
-
-          <div
-            className="flex items-center gap-2 px-4 py-2 rounded-full"
-            style={{ background: t.accentDim }}
-          >
-            <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
-            <span className="text-xs font-medium" style={{ color: t.accent }}>Waiting for next question…</span>
-          </div>
+              <span className="text-xs font-medium" style={{ color: t.accent }}>
+                Tap another choice to change your answer
+              </span>
+            </div>
+          ) : null}
         </div>
       </TriviaShell>
     );
@@ -800,13 +950,13 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
   if (phase === "leaderboard") {
     const sorted = [...players].sort((a, b) => b.score - a.score);
     return (
-      <TriviaShell t={t}>
-        <div className="px-5 pt-6 pb-3 text-center shrink-0">
+      <TriviaShell t={t} paused={!!session?.is_paused}>
+        <div className="p-8 pb-[10px] text-center shrink-0">
           <h1 className="text-[28px] font-bold tracking-[-0.025em] leading-[1.05]">Leaderboard</h1>
           <p className="text-[14px] mt-1.5" style={{ color: t.textMuted }}>Standings so far</p>
         </div>
 
-        <div className="flex-1 px-5 pb-5 flex flex-col gap-3 overflow-y-auto min-h-0">
+        <div className="flex-1 px-8 pb-5 flex flex-col gap-3 overflow-y-auto min-h-0">
           <TriviaCard t={t} className="!p-2">
             <div>
               {sorted.slice(0, 10).map((p, i) => {
@@ -825,11 +975,14 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
                       #{i + 1}
                     </span>
                     <AvatarBubble player={p} size={36} />
-                    <span className="flex-1 font-display font-semibold text-[14px] truncate">
+                    <span
+                      className="flex-1 font-semibold text-[14px] truncate"
+                      style={{ fontFamily: getFontFamily(t.headingFont) }}
+                    >
                       {p.display_name}{isMe ? " · You" : ""}
                     </span>
                     <span
-                      className="font-display font-bold text-[15px] tabular-nums"
+                      className="font-bold text-[15px] tabular-nums"
                       style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
                     >
                       {p.score}
@@ -856,16 +1009,18 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
     const sorted = [...players].sort((a, b) => b.score - a.score);
     const myRank = sorted.findIndex((p) => p.id === player?.id) + 1;
     return (
-      <TriviaShell t={t}>
-        <div className="px-5 pt-6 pb-3 text-center shrink-0">
+      <TriviaShell t={t} paused={!!session?.is_paused}>
+        <div className="p-8 pb-[10px] text-center shrink-0">
           <h1 className="text-[28px] font-bold tracking-[-0.025em] leading-[1.05]">Game Over</h1>
           <p className="text-[14px] mt-1.5" style={{ color: t.textMuted }}>Final standings</p>
         </div>
 
-        <div className="flex-1 px-5 pb-5 flex flex-col gap-3 overflow-y-auto min-h-0">
+        <div className="flex-1 px-8 pb-5 flex flex-col gap-3 overflow-y-auto min-h-0">
           {player && (
             <TriviaCard t={t} glow className="text-center py-5">
-              <AvatarBubble player={player} size={72} />
+              <div className="flex justify-center">
+                <AvatarBubble player={player} size={72} />
+              </div>
               <p className="text-sm mt-3 mb-1" style={{ color: t.textMuted }}>{player.display_name}</p>
               <p
                 className="text-4xl font-bold tracking-[-0.025em] tabular-nums"
@@ -908,11 +1063,14 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
                         #{i + 1}
                       </span>
                       <AvatarBubble player={p} size={32} />
-                      <span className="flex-1 font-display font-semibold text-[13px] truncate">
+                      <span
+                        className="flex-1 font-semibold text-[13px] truncate"
+                        style={{ fontFamily: getFontFamily(t.headingFont) }}
+                      >
                         {p.display_name}{isMe ? " · You" : ""}
                       </span>
                       <span
-                        className="font-display font-bold text-[14px] tabular-nums"
+                        className="font-bold text-[14px] tabular-nums"
                         style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
                       >
                         {p.score}
@@ -933,7 +1091,7 @@ export default function TriviaPlayerPage({ sessionCode, devMode }: { sessionCode
   }
 
   return (
-    <TriviaShell t={t}>
+    <TriviaShell t={t} paused={!!session?.is_paused}>
       <div className="flex-1 flex flex-col items-center justify-center gap-4">
         <div className="w-10 h-10 border-3 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
         <p className="text-sm" style={{ color: t.textMuted }}>Loading…</p>

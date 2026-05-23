@@ -14,6 +14,32 @@ const GOOGLE_FONT_FAMILIES: Record<ThemeFont, string> = {
   "Bebas Neue": "Bebas+Neue",
   "Oswald": "Oswald:wght@400;500;600;700",
   "Playfair Display": "Playfair+Display:wght@400;500;600;700;800;900",
+  "JetBrains Mono": "JetBrains+Mono:wght@400;500;600;700",
+  "Orbitron": "Orbitron:wght@400;500;600;700;800;900",
+  "Kalam": "Kalam:wght@400;700",
+  "Patrick Hand": "Patrick+Hand",
+  "Fraunces": "Fraunces:wght@400;500;600;700;800;900",
+};
+
+/** Font category — used by the theme picker to group/label options. */
+export const FONT_CATEGORY: Record<ThemeFont, "sans" | "serif" | "display" | "mono" | "handwritten"> = {
+  "Montserrat": "sans",
+  "DM Sans": "sans",
+  "Inter": "sans",
+  "Poppins": "sans",
+  "Space Grotesk": "sans",
+  "Outfit": "sans",
+  "Sora": "sans",
+  "Raleway": "sans",
+  "Nunito": "sans",
+  "Bebas Neue": "display",
+  "Oswald": "display",
+  "Playfair Display": "serif",
+  "Fraunces": "serif",
+  "JetBrains Mono": "mono",
+  "Orbitron": "display",
+  "Kalam": "handwritten",
+  "Patrick Hand": "handwritten",
 };
 
 /** Fonts already loaded by next/font and don't need dynamic loading */

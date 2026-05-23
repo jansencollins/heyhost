@@ -18,6 +18,15 @@ import { AVATAR_COLORS } from "@/lib/avatar-colors";
 import { useGameTheme } from "@/lib/theme-context";
 import { getFontFamily, getGoogleFontsUrl } from "@/lib/theme-fonts";
 import { getPatternBg } from "@/lib/theme-patterns";
+import {
+  getCardCss,
+  getButtonCss,
+  getButtonInnerCss,
+  getButtonTextStyle,
+  getShellCss,
+  getHeadingCss,
+} from "@/lib/theme-styles";
+import { GamePausedOverlay } from "@/components/games/GamePausedOverlay";
 import type {
   Session,
   SessionPlayer,
@@ -25,6 +34,13 @@ import type {
   PriceGuess,
   GameTheme,
 } from "@/lib/types";
+
+// Returns 0 when theme is in "square" mode, otherwise the supplied rounded
+// pixel value. Used by every container that previously hard-coded
+// rounded-{lg,xl,2xl,full} so the theme's corner setting reaches the player UI.
+function cornerR(t: GameTheme, base: number): number {
+  return t.corners === "square" ? 0 : base;
+}
 
 type PlayerPhase =
   | "joining"
@@ -54,17 +70,25 @@ export interface PIRPlayerDevMode {
 
 /* ─── Theme-aware helper components ─── */
 
-function BankShell({ children, t }: { children: React.ReactNode; t: GameTheme }) {
+function BankShell({ children, t, paused = false }: { children: React.ReactNode; t: GameTheme; paused?: boolean }) {
   const fontsUrl = getGoogleFontsUrl([t.headingFont, t.bodyFont]);
   const headingFontCss = getFontFamily(t.headingFont);
   const patternBg = getPatternBg(t.pattern, t.accent);
+  const styleShell = getShellCss(t);
+  const headingExtra = getHeadingCss(t);
+  // Compose backgrounds: style shell may declare its own backgroundImage; the
+  // optional holiday pattern stacks on top using comma syntax.
+  const shellBgImage = patternBg && styleShell.backgroundImage
+    ? `${patternBg}, ${styleShell.backgroundImage}`
+    : (patternBg ?? styleShell.backgroundImage);
   return (
     <div
-      className="min-h-full flex flex-col themed-shell overflow-x-hidden"
+      className="min-h-full h-full flex flex-col themed-shell overflow-x-hidden relative"
       style={{
         backgroundColor: t.bg,
-        backgroundImage: patternBg ?? undefined,
-        backgroundRepeat: patternBg ? "repeat" : undefined,
+        ...styleShell,
+        backgroundImage: shellBgImage,
+        backgroundRepeat: shellBgImage ? "repeat" : undefined,
         color: t.textPrimary,
         fontFamily: getFontFamily(t.bodyFont),
       }}
@@ -74,14 +98,17 @@ function BankShell({ children, t }: { children: React.ReactNode; t: GameTheme })
         <link rel="stylesheet" href={fontsUrl} />
       )}
       <style>{`
-        .themed-shell h1,.themed-shell h2,.themed-shell h3{
+        .themed-shell h1,.themed-shell h2,.themed-shell h3,.themed-shell h4,.themed-shell h5,.themed-shell h6{
+          color:inherit;
           font-family:${headingFontCss};
-          letter-spacing:-0.02em;
+          letter-spacing:${(headingExtra.letterSpacing as string) ?? "-0.02em"};
           line-height:1.05;
+          text-transform:${(headingExtra.textTransform as string) ?? "none"};
         }
         .themed-shell input::placeholder{color:${t.textDim}}
       `}</style>
       {children}
+      {paused && <GamePausedOverlay />}
     </div>
   );
 }
@@ -99,16 +126,8 @@ function BankCard({
 }) {
   return (
     <div
-      className={`rounded-3xl p-4 overflow-hidden ${className}`}
-      style={{
-        background: t.surface,
-        // Ink-tinted hairline border — works on any theme bg
-        border: `1.5px solid color-mix(in srgb, ${t.textPrimary} 18%, transparent)`,
-        // Soft, warm depth shadow (subtle on dark themes, slightly more visible on light)
-        boxShadow: glow
-          ? `0 0 30px ${t.accentDim}`
-          : `0 8px 24px -16px rgba(0,0,0,0.45)`,
-      }}
+      className={`p-4 ${className}`}
+      style={getCardCss(t, { glow })}
     >
       {children}
     </div>
@@ -133,26 +152,18 @@ function BankButton({
   t: GameTheme;
 }) {
   const base =
-    "w-full py-3.5 rounded-full font-display font-semibold text-[16px] tracking-[-0.01em] transition-[filter,transform,background] duration-200 flex items-center justify-center gap-2 active:scale-[0.98] hover:brightness-95";
-  const buttonTextColor = t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A";
-  const inkBorder = `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`;
-  const variantStyles: Record<string, React.CSSProperties> = {
-    primary: { background: t.accent, color: buttonTextColor, border: inkBorder },
-    ghost: {
-      background: "transparent",
-      border: `1.5px solid color-mix(in srgb, ${t.textPrimary} 25%, transparent)`,
-      color: t.textPrimary,
-    },
-    danger: { background: t.danger, color: "#FFFFFF", border: inkBorder },
-  };
+    "w-full py-3.5 text-[16px] transition-[filter,transform,background] duration-200 flex items-center justify-center gap-2 active:scale-[0.98] hover:brightness-95";
+  const styleVariant = variant === "danger" ? "primary" : variant;
+  const css = getButtonCss(t, { variant: styleVariant });
+  const textCss = getButtonTextStyle(t);
+  const innerCss = getButtonInnerCss(t);
+  const finalStyle: React.CSSProperties =
+    variant === "danger"
+      ? { ...css, background: t.danger, color: "#FFFFFF" }
+      : css;
 
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled || loading}
-      className={`${base} disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
-      style={variantStyles[variant]}
-    >
+  const content = (
+    <span style={innerCss} className="inline-flex items-center gap-2">
       {loading && (
         <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -160,6 +171,17 @@ function BankButton({
         </svg>
       )}
       {children}
+    </span>
+  );
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || loading}
+      className={`${base} disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+      style={{ ...finalStyle, ...textCss, fontFamily: getFontFamily(t.headingFont) }}
+    >
+      {content}
     </button>
   );
 }
@@ -181,7 +203,7 @@ function PulsingDot({ t }: { t: GameTheme }) {
 
 function BankHeader({ title, subtitle, t }: { title: string; subtitle?: string; t: GameTheme }) {
   return (
-    <div className="px-5 pt-6 pb-3 text-center">
+    <div className="p-8 pb-[10px] text-center">
       <h1 className="text-[28px] font-bold tracking-[-0.025em] leading-[1.05]">{title}</h1>
       {subtitle && (
         <p className="text-[14px] mt-1.5" style={{ color: t.textMuted }}>
@@ -224,14 +246,22 @@ function TransactionRow({
     >
       <div className="shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
-        <p className="font-display font-semibold text-[14px] tracking-[-0.01em] truncate">{name}</p>
-        <p className="text-[12px]" style={{ color: t.textDim }}>
+        <p
+          className="font-semibold text-[14px] tracking-[-0.01em] truncate"
+          style={{ fontFamily: getFontFamily(t.headingFont) }}
+        >
+          {name}
+        </p>
+        <p
+          className="text-[12px]"
+          style={{ color: t.textDim, fontFamily: getFontFamily(t.bodyFont) }}
+        >
           {detail}
         </p>
       </div>
       <span
-        className="font-display font-bold text-[15px] tracking-[-0.01em] whitespace-nowrap tabular-nums"
-        style={{ color: amountColor || t.accent }}
+        className="font-bold text-[15px] tracking-[-0.01em] whitespace-nowrap tabular-nums"
+        style={{ color: amountColor || t.accent, fontFamily: getFontFamily(t.headingFont) }}
       >
         {amount}
       </span>
@@ -249,7 +279,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
   const [myGuess, setMyGuess] = useState<PriceGuess | null>(devMode?.myGuess ?? null);
   const [guessInput, setGuessInput] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [avatarColor, setAvatarColor] = useState<string>(AVATAR_COLORS[0]);
+  const palette = t.playerColors && t.playerColors.length > 0 ? t.playerColors : AVATAR_COLORS;
+  const [avatarColor, setAvatarColor] = useState<string>(palette[0]);
   const [error, setError] = useState(devMode?.error || "");
   const [joinLoading, setJoinLoading] = useState(false);
   const [showPercent, setShowPercent] = useState(devMode?.showPercent ?? false);
@@ -261,6 +292,23 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
     { itemName: string; guess: number; actualPrice: number; score: number; tier: string; accuracy: number }[]
   >(devMode?.guessHistory ?? []);
   const [lobbyTab, setLobbyTab] = useState<"prices" | "scores" | "help">("prices");
+
+  // Measure the joining body width so the layout responds to the FRAME (dev
+  // preview) rather than the browser viewport.
+  const [joiningWidth, setJoiningWidth] = useState(0);
+  const joiningRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const measure = () => setJoiningWidth(node.getBoundingClientRect().width);
+    measure();
+    requestAnimationFrame(measure);
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) setJoiningWidth(e.contentRect.width);
+    });
+    ro.observe(node);
+    (node as unknown as { __ro?: ResizeObserver }).__ro = ro;
+  }, []);
+  const cardCols = joiningWidth >= 896 ? "grid-cols-6" : joiningWidth >= 448 ? "grid-cols-4" : "grid-cols-3";
+  const inputPadY = joiningWidth >= 448 ? "py-3" : "py-1.5";
 
   // Load session
   useEffect(() => {
@@ -549,8 +597,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
   // ERROR
   if (phase === "error") {
     return (
-      <BankShell t={t}>
-        <div className="flex-1 flex flex-col items-center justify-center px-5">
+      <BankShell t={t} paused={!!session?.is_paused}>
+        <div className="flex-1 flex flex-col items-center justify-center px-8">
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
             style={{ background: "rgba(185,28,28,0.12)" }}
@@ -572,8 +620,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
   // REMOVED
   if (phase === "removed") {
     return (
-      <BankShell t={t}>
-        <div className="flex-1 flex flex-col items-center justify-center px-5">
+      <BankShell t={t} paused={!!session?.is_paused}>
+        <div className="flex-1 flex flex-col items-center justify-center px-8">
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
             style={{ background: "rgba(185,28,28,0.12)" }}
@@ -609,100 +657,132 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
   // ─── JOIN FORM (like Account Opening) ───
   if (phase === "joining") {
     return (
-      <BankShell t={t}>
-        <div className="flex-1 flex flex-col justify-center px-4 py-3">
-          {/* Game Artwork Card */}
-          <div className="relative mb-3">
-            {/* Game code pill - centered on top border */}
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-              <div
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-full"
-                style={{ background: t.bg, border: `1px solid ${t.accent}` }}
+      <BankShell t={t} paused={!!session?.is_paused}>
+        <div
+          ref={joiningRef}
+          className="flex-1 flex flex-col px-8 pt-7 pb-8 min-h-0"
+        >
+          {/* ── Top region: Game Code badge + thumbnail ── */}
+          <div className="shrink-0 flex flex-col gap-2">
+            <div className="flex w-full items-center justify-center gap-2">
+              <Image
+                src="/security-chip.png"
+                alt=""
+                width={16}
+                height={16}
+                className="w-3.5 h-3.5 object-contain"
+              />
+              <span
+                className="font-bold text-[10px] uppercase tracking-wider tabular-nums"
+                style={{ color: t.accent, fontFamily: getFontFamily(t.headingFont) }}
               >
-                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke={t.accent} strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-                <span className="font-mono font-bold text-xs tracking-[0.15em]" style={{ color: t.accent }}>
-                  {sessionCode}
-                </span>
-              </div>
+                Game Code: {sessionCode}
+              </span>
             </div>
-            <div
-              className="rounded-2xl overflow-hidden pt-4"
-              style={{ border: `1px solid ${t.border}`, background: t.surface }}
-            >
-              <h1 className="text-sm font-bold px-3 pb-2 mt-2 text-center">{gameName || "That Costs How Much!?"}</h1>
-              <div className="flex justify-center">
-                <Image
-                  src="/that-costs-how-much.png"
-                  alt="That Costs How Much!?"
-                  width={150}
-                  height={150}
-                  className="h-36 w-auto object-contain"
-                  priority
-                />
-              </div>
-            </div>
-          </div>
 
-          {/* Name Input */}
-          <BankCard t={t} className="!p-3 mb-2">
-            <label className="block text-[10px] font-medium mb-1 uppercase tracking-wider text-center" style={{ color: t.textDim }}>
-              Account Holder
-            </label>
-            <input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Enter your name"
-              maxLength={20}
-              autoFocus
-              className="w-full bg-transparent text-lg font-bold text-center focus:outline-none"
-              style={{ color: t.textPrimary, caretColor: t.accent }}
-            />
-          </BankCard>
-
-          {/* Card Picker */}
-          <div className="flex flex-col mb-2">
-            <h2 className="text-sm font-bold text-center mt-2 mb-2">Select Your Player Card</h2>
-            <div className="grid grid-cols-4 gap-x-1.5 gap-y-1.5">
-              {AVATAR_COLORS.map((color) => {
-                const selected = avatarColor === color;
-                return (
-                  <button
-                    key={color}
-                    onClick={() => setAvatarColor(color)}
-                    className="relative rounded-md transition-all duration-150 flex items-center justify-center"
-                    style={{
-                      background: selected ? t.accentDim : "transparent",
-                      border: selected ? `2px solid ${t.accent}` : `1px solid ${t.border}`,
-                      padding: "4px",
-                    }}
-                  >
-                    <PlayerCardIcon color={color} size={999} className="w-full h-auto max-h-full" />
-                    {selected && (
-                      <div
-                        className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold"
-                        style={{ background: t.accent, color: t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A" }}
+            <BankCard t={t} className="!p-0 overflow-hidden w-full">
+              <div
+                className="flex flex-col items-center justify-center text-center px-4 py-5"
+                style={{ background: `linear-gradient(135deg, ${t.accent} 0%, color-mix(in srgb, ${t.accent} 70%, ${t.textPrimary}) 100%)` }}
+              >
+                {(() => {
+                  const isDark = t.mode === "dark";
+                  const titleFill = isDark ? t.bg : "#FFFFFF";
+                  const shadowColor = isDark ? "#FFFFFF" : t.textPrimary;
+                  return (
+                    <>
+                      <h1
+                        className="font-bold text-[26px] tracking-[-0.03em] leading-[1.05]"
+                        style={{ color: titleFill, textShadow: `0 2px 10px ${shadowColor}33` }}
                       >
-                        ✓
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                        That Costs How Much!?
+                      </h1>
+                      {gameName && (
+                        <p
+                          className="text-[13px] font-semibold mt-2 leading-snug"
+                          style={{ color: titleFill, textShadow: `0 1px 4px ${shadowColor}66` }}
+                        >
+                          {gameName} Edition
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </BankCard>
           </div>
 
-          {error && (
-            <p className="text-xs text-center font-medium mb-1" style={{ color: t.danger }}>
-              {error}
-            </p>
-          )}
+          {/* ── Body: name + color picker, vertically centered ── */}
+          <div className="flex-1 flex flex-col justify-center gap-7 min-h-0 py-4">
+            <div className="w-full max-w-md mx-auto">
+              <label className="block text-[10px] font-medium mb-1.5 uppercase tracking-wider text-center" style={{ color: t.textMuted }}>
+                Account Holder
+              </label>
+              <input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Enter your name"
+                maxLength={20}
+                autoFocus
+                className={`w-full text-sm font-bold text-center focus:outline-none px-3 ${inputPadY}`}
+                style={{
+                  ...getCardCss(t),
+                  color: t.textPrimary,
+                  caretColor: t.accent,
+                }}
+              />
+            </div>
 
-          {/* Join Button */}
-          <BankButton t={t} onClick={handleJoin} loading={joinLoading}>
-            Open Account
-          </BankButton>
+            <div className="flex flex-col">
+              <p className="block text-[10px] font-medium mb-1.5 uppercase tracking-wider text-center" style={{ color: t.textMuted }}>
+                Select Your Player Card
+              </p>
+              <div className={`grid ${cardCols} gap-2 w-[90%] mx-auto`}>
+                {palette.map((color) => {
+                  const selected = avatarColor === color;
+                  return (
+                    <button
+                      key={color}
+                      onClick={() => setAvatarColor(color)}
+                      className={`relative transition-all duration-200 flex items-center justify-center ${selected ? "scale-100" : "scale-[0.85]"}`}
+                      style={{ padding: "2px" }}
+                    >
+                      <PlayerCardIcon color={color} size={999} className="w-full h-auto max-h-full" />
+                      {selected && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center"
+                            style={{
+                              background: t.accent,
+                              border: `2px solid color-mix(in srgb, ${t.textPrimary} 90%, transparent)`,
+                              color: t.buttonTextMode === "light" ? "#FFFFFF" : "#1A1A1A",
+                            }}
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-xs text-center font-medium" style={{ color: t.danger }}>
+                {error}
+              </p>
+            )}
+          </div>
+
+          {/* ── Bottom region: Join button anchored ── */}
+          <div className="shrink-0 w-full max-w-md mx-auto">
+            <BankButton t={t} onClick={handleJoin} loading={joinLoading}>
+              Open Account
+            </BankButton>
+          </div>
         </div>
       </BankShell>
     );
@@ -713,9 +793,9 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
     const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
 
     return (
-      <BankShell t={t}>
+      <BankShell t={t} paused={!!session?.is_paused}>
         {/* Greeting Header */}
-        <div className="px-5 pt-6 pb-4 flex items-center justify-between">
+        <div className="p-8 pb-[10px] flex items-center justify-between">
           <div>
             <p className="text-sm" style={{ color: t.textMuted }}>Welcome back!</p>
             <h1 className="text-2xl font-bold">{player?.display_name}</h1>
@@ -726,7 +806,7 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
           </div>
         </div>
 
-        <div className="flex-1 px-5 pb-6 flex flex-col gap-4 overflow-y-auto">
+        <div className="flex-1 px-4 pb-6 flex flex-col gap-4 overflow-y-auto">
           {/* Player Card + Balance */}
           <BankCard t={t} glow className="flex items-center gap-4">
             <PlayerCardIcon color={player?.avatar_color || "#666"} size={64} />
@@ -760,10 +840,11 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
                 key={key}
                 type="button"
                 onClick={() => setLobbyTab(key)}
-                className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl transition-all"
+                className="flex flex-col items-center gap-1.5 py-2.5 transition-all"
                 style={{
                   background: lobbyTab === key ? t.accentDim : t.surface,
                   border: `1px solid ${lobbyTab === key ? t.accent + "40" : t.border}`,
+                  borderRadius: cornerR(t, 12),
                 }}
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke={lobbyTab === key ? t.accent : t.textDim} strokeWidth={1.5}>
@@ -849,8 +930,14 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
                       detail={`#${i + 1}${p.id === player?.id ? " · You" : ""}`}
                       amount={`${p.score || 0} pts`}
                       highlight={p.id === player?.id}
-                      className={`${i === 0 ? "rounded-t-xl" : ""} ${i === sortedPlayers.length - 1 ? "rounded-b-xl" : ""} ${i < sortedPlayers.length - 1 ? "border-b" : ""}`}
-                      style={{ borderColor: "rgba(255,255,255,0.07)" }}
+                      className={i < sortedPlayers.length - 1 ? "border-b" : ""}
+                      style={{
+                        borderColor: "rgba(255,255,255,0.07)",
+                        borderTopLeftRadius: i === 0 ? cornerR(t, 12) : 0,
+                        borderTopRightRadius: i === 0 ? cornerR(t, 12) : 0,
+                        borderBottomLeftRadius: i === sortedPlayers.length - 1 ? cornerR(t, 12) : 0,
+                        borderBottomRightRadius: i === sortedPlayers.length - 1 ? cornerR(t, 12) : 0,
+                      }}
                     />
                   ))}
                   {players.length === 0 && (
@@ -902,8 +989,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
                     ].map(({ tier, range }) => (
                       <div
                         key={tier}
-                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs"
-                        style={{ background: t.surfaceLight }}
+                        className="flex items-center justify-between px-2.5 py-1.5 text-xs"
+                        style={{ background: t.surfaceLight, borderRadius: cornerR(t, 8) }}
                       >
                         <span className="font-medium">{tier}</span>
                         <span style={{ color: t.textDim }}>{range}</span>
@@ -917,8 +1004,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
 
           {/* Waiting Indicator */}
           <div
-            className="flex items-center justify-center gap-3 py-3 rounded-2xl shrink-0"
-            style={{ background: t.accentDim }}
+            className="flex items-center justify-center gap-3 py-3 shrink-0"
+            style={{ background: t.accentDim, borderRadius: cornerR(t, 16) }}
           >
             <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
             <span className="text-sm font-medium" style={{ color: t.accent }}>
@@ -933,13 +1020,13 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
   // ─── GUESSING / GUESSED (Transfer Screen) ───
   if ((phase === "guessing" || phase === "guessed") && currentItem) {
     return (
-      <BankShell t={t}>
+      <BankShell t={t} paused={!!session?.is_paused}>
         {/* Top Bar */}
-        <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+        <div className="px-8 pt-5 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold"
-              style={{ background: t.accentDim, color: t.accent }}
+              className="w-8 h-8 flex items-center justify-center text-xs font-bold"
+              style={{ background: t.accentDim, color: t.accent, borderRadius: cornerR(t, 8) }}
             >
               {(session.pir_current_item_order || 0) + 1}
             </div>
@@ -1088,8 +1175,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
   // ─── PRICE RESULT (Transaction Complete) ───
   if (phase === "price_result" && currentItem) {
     return (
-      <BankShell t={t}>
-        <div className="flex-1 px-5 py-6 flex flex-col items-center justify-center gap-4">
+      <BankShell t={t} paused={!!session?.is_paused}>
+        <div className="flex-1 px-4 py-6 flex flex-col items-center justify-center gap-4">
           <BankCard t={t} glow className="w-full text-center">
             <p className="text-xs uppercase tracking-wider mb-2" style={{ color: t.textDim }}>
               Actual Price
@@ -1113,8 +1200,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
               </div>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div
-                  className="rounded-xl py-3 px-2 text-center"
-                  style={{ background: t.surfaceLight }}
+                  className="py-3 px-2 text-center"
+                  style={{ background: t.surfaceLight, borderRadius: cornerR(t, 12) }}
                 >
                   <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: t.textDim }}>Accuracy</p>
                   <p className="text-xl font-bold" style={{ color: t.accent }}>
@@ -1122,8 +1209,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
                   </p>
                 </div>
                 <div
-                  className="rounded-xl py-3 px-2 text-center"
-                  style={{ background: t.surfaceLight }}
+                  className="py-3 px-2 text-center"
+                  style={{ background: t.surfaceLight, borderRadius: cornerR(t, 12) }}
                 >
                   <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: t.textDim }}>Points</p>
                   <p className="text-xl font-bold" style={{ color: t.accent }}>
@@ -1133,8 +1220,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
               </div>
               {isInPenaltyZone(myGuess.guess_accuracy) ? (
                 <div
-                  className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
-                  style={{ background: "rgba(185,28,28,0.10)", border: `1px solid rgba(185,28,28,0.25)` }}
+                  className="flex items-center gap-2.5 px-3 py-2.5"
+                  style={{ background: "rgba(185,28,28,0.10)", border: `1px solid rgba(185,28,28,0.25)`, borderRadius: cornerR(t, 12) }}
                 >
                   <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke={t.danger} strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -1146,8 +1233,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
                 </div>
               ) : (
                 <div
-                  className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
-                  style={{ background: "rgba(21,128,61,0.10)", border: `1px solid rgba(21,128,61,0.22)` }}
+                  className="flex items-center gap-2.5 px-3 py-2.5"
+                  style={{ background: "rgba(21,128,61,0.10)", border: `1px solid rgba(21,128,61,0.22)`, borderRadius: cornerR(t, 12) }}
                 >
                   <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="#15803d" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
@@ -1162,8 +1249,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
           )}
 
           <div
-            className="flex items-center gap-2 px-4 py-2 rounded-full"
-            style={{ background: t.accentDim }}
+            className="flex items-center gap-2 px-4 py-2"
+            style={{ background: t.accentDim, borderRadius: cornerR(t, 9999) }}
           >
             <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
             <span className="text-xs font-medium" style={{ color: t.accent }}>Processing next transaction...</span>
@@ -1179,8 +1266,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
     const playerAtRisk = penaltyPlayers.some((p) => p.playerId === player?.id);
 
     return (
-      <BankShell t={t}>
-        <div className="flex-1 flex flex-col items-center justify-center px-5">
+      <BankShell t={t} paused={!!session?.is_paused}>
+        <div className="flex-1 flex flex-col items-center justify-center px-8">
           <div
             className="w-14 h-14 rounded-full flex items-center justify-center mb-2"
             style={{ background: `${t.textPrimary}15` }}
@@ -1242,8 +1329,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
           {/* Safe / At Risk status */}
           {playerAtRisk ? (
             <div
-              className="flex flex-col items-center text-center rounded-xl px-3 py-2.5 mt-4 w-full max-w-xs"
-              style={{ background: "rgba(185,28,28,0.10)", border: `1px solid rgba(185,28,28,0.25)` }}
+              className="flex flex-col items-center text-center px-3 py-2.5 mt-4 w-full max-w-xs"
+              style={{ background: "rgba(185,28,28,0.10)", border: `1px solid rgba(185,28,28,0.25)`, borderRadius: cornerR(t, 12) }}
             >
               <svg className="w-5 h-5 mb-1.5" fill="none" viewBox="0 0 24 24" stroke={t.danger} strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -1253,8 +1340,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
             </div>
           ) : (
             <div
-              className="flex flex-col items-center text-center rounded-xl px-3 py-2.5 mt-4 w-full max-w-xs"
-              style={{ background: "rgba(21,128,61,0.10)", border: `1px solid rgba(21,128,61,0.22)` }}
+              className="flex flex-col items-center text-center px-3 py-2.5 mt-4 w-full max-w-xs"
+              style={{ background: "rgba(21,128,61,0.10)", border: `1px solid rgba(21,128,61,0.22)`, borderRadius: cornerR(t, 12) }}
             >
               <svg className="w-5 h-5 mb-1.5" fill="none" viewBox="0 0 24 24" stroke="#15803d" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
@@ -1272,10 +1359,10 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
   if (phase === "leaderboard") {
     const sorted = [...players].sort((a, b) => b.score - a.score);
     return (
-      <BankShell t={t}>
+      <BankShell t={t} paused={!!session?.is_paused}>
         <BankHeader t={t} title="Standings" subtitle="Account Statement" />
 
-        <div className="flex-1 px-5 pb-6 flex flex-col gap-4 overflow-y-auto">
+        <div className="flex-1 px-4 pb-6 flex flex-col gap-4 overflow-y-auto">
           {/* Top 3 Podium */}
           {sorted.length >= 3 && (
             <div className="flex items-end justify-center gap-3 pt-2 pb-4">
@@ -1290,10 +1377,12 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
                       {p.display_name}
                     </p>
                     <div
-                      className={`w-full ${heights[i]} rounded-t-xl flex flex-col items-center justify-center`}
+                      className={`w-full ${heights[i]} flex flex-col items-center justify-center`}
                       style={{
                         background: rank === 1 ? t.accentDim : t.surface,
                         border: rank === 1 ? `1px solid ${t.accent}` : `1px solid ${t.border}`,
+                        borderTopLeftRadius: cornerR(t, 12),
+                        borderTopRightRadius: cornerR(t, 12),
                       }}
                     >
                       <span className="text-lg font-bold" style={{ color: rank === 1 ? t.accent : t.textPrimary }}>
@@ -1312,18 +1401,27 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
           {/* Full Rankings */}
           <BankCard t={t} className="!p-2">
             <div>
-              {sorted.slice(0, 10).map((p, i) => (
-                <TransactionRow t={t}
-                  key={p.id}
-                  icon={<PlayerCardIcon color={p.avatar_color} size={36} />}
-                  name={p.display_name}
-                  detail={`#${i + 1}${p.id === player?.id ? " · You" : ""}`}
-                  amount={`${p.score} pts`}
-                  highlight={p.id === player?.id}
-                  className={`${i === 0 ? "rounded-t-xl" : ""} ${i === sorted.length - 1 || i === 9 ? "rounded-b-xl" : ""} ${i < Math.min(sorted.length, 10) - 1 ? "border-b" : ""}`}
-                  style={{ borderColor: "rgba(255,255,255,0.07)" }}
-                />
-              ))}
+              {sorted.slice(0, 10).map((p, i) => {
+                const isLast = i === sorted.length - 1 || i === 9;
+                return (
+                  <TransactionRow t={t}
+                    key={p.id}
+                    icon={<PlayerCardIcon color={p.avatar_color} size={36} />}
+                    name={p.display_name}
+                    detail={`#${i + 1}${p.id === player?.id ? " · You" : ""}`}
+                    amount={`${p.score} pts`}
+                    highlight={p.id === player?.id}
+                    className={i < Math.min(sorted.length, 10) - 1 ? "border-b" : ""}
+                    style={{
+                      borderColor: "rgba(255,255,255,0.07)",
+                      borderTopLeftRadius: i === 0 ? cornerR(t, 12) : 0,
+                      borderTopRightRadius: i === 0 ? cornerR(t, 12) : 0,
+                      borderBottomLeftRadius: isLast ? cornerR(t, 12) : 0,
+                      borderBottomRightRadius: isLast ? cornerR(t, 12) : 0,
+                    }}
+                  />
+                );
+              })}
             </div>
           </BankCard>
 
@@ -1381,10 +1479,10 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
     const myRank = sorted.findIndex((p) => p.id === player?.id) + 1;
 
     return (
-      <BankShell t={t}>
+      <BankShell t={t} paused={!!session?.is_paused}>
         <BankHeader t={t} title="Game Over" subtitle="Final Account Summary" />
 
-        <div className="flex-1 px-5 pb-6 flex flex-col gap-4 overflow-y-auto">
+        <div className="flex-1 px-4 pb-6 flex flex-col gap-4 overflow-y-auto">
           {/* Final Score Card */}
           {player && (
             <BankCard t={t} glow className="text-center py-6">
@@ -1405,8 +1503,8 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
                 </span>
               </p>
               <div
-                className="inline-flex items-center gap-1.5 mt-3 px-4 py-1.5 rounded-full text-sm font-bold"
-                style={{ background: t.accentDim, color: t.accent }}
+                className="inline-flex items-center gap-1.5 mt-3 px-4 py-1.5 text-sm font-bold"
+                style={{ background: t.accentDim, color: t.accent, borderRadius: cornerR(t, 9999) }}
               >
                 Rank #{myRank}
               </div>
@@ -1418,18 +1516,27 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
             <h3 className="text-sm font-bold mb-2 px-1">Final Standings</h3>
             <BankCard t={t} className="!p-2">
               <div>
-                {sorted.slice(0, 10).map((p, i) => (
-                  <TransactionRow t={t}
-                    key={p.id}
-                    icon={<PlayerCardIcon color={p.avatar_color} size={36} />}
-                    name={p.display_name}
-                    detail={`#${i + 1}${p.id === player?.id ? " · You" : ""}`}
-                    amount={`${p.score} pts`}
-                    highlight={p.id === player?.id}
-                    className={`${i === 0 ? "rounded-t-xl" : ""} ${i === sorted.length - 1 || i === 9 ? "rounded-b-xl" : ""} ${i < Math.min(sorted.length, 10) - 1 ? "border-b" : ""}`}
-                    style={{ borderColor: "rgba(255,255,255,0.07)" }}
-                  />
-                ))}
+                {sorted.slice(0, 10).map((p, i) => {
+                  const isLast = i === sorted.length - 1 || i === 9;
+                  return (
+                    <TransactionRow t={t}
+                      key={p.id}
+                      icon={<PlayerCardIcon color={p.avatar_color} size={36} />}
+                      name={p.display_name}
+                      detail={`#${i + 1}${p.id === player?.id ? " · You" : ""}`}
+                      amount={`${p.score} pts`}
+                      highlight={p.id === player?.id}
+                      className={i < Math.min(sorted.length, 10) - 1 ? "border-b" : ""}
+                      style={{
+                        borderColor: "rgba(255,255,255,0.07)",
+                        borderTopLeftRadius: i === 0 ? cornerR(t, 12) : 0,
+                        borderTopRightRadius: i === 0 ? cornerR(t, 12) : 0,
+                        borderBottomLeftRadius: isLast ? cornerR(t, 12) : 0,
+                        borderBottomRightRadius: isLast ? cornerR(t, 12) : 0,
+                      }}
+                    />
+                  );
+                })}
               </div>
             </BankCard>
           </div>
@@ -1444,7 +1551,7 @@ export default function PIRPlayerPage({ sessionCode, devMode }: { sessionCode: s
 
   // ─── Default Loading ───
   return (
-    <BankShell t={t}>
+    <BankShell t={t} paused={!!session?.is_paused}>
       <div className="flex-1 flex flex-col items-center justify-center gap-4">
         <div className="w-10 h-10 border-3 rounded-full animate-spin" style={{ borderColor: `${t.accent} transparent transparent transparent` }} />
         <p className="text-sm" style={{ color: t.textMuted }}>Loading...</p>
