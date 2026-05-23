@@ -101,6 +101,7 @@ export default function StalkMarketEditPage({
           sm_scoring_version: scoring,
           sm_game_mode: mode,
           theme,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", gameId);
       if (upErr) {
@@ -113,6 +114,14 @@ export default function StalkMarketEditPage({
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, scoring, mode, theme]);
+
+  async function touchGame() {
+    const supabase = createClient();
+    await supabase
+      .from("games")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", gameId);
+  }
 
   async function addQuestion() {
     const supabase = createClient();
@@ -127,6 +136,7 @@ export default function StalkMarketEditPage({
       .single();
     if (!upErr && data) {
       setQuestions([...questions, data as StalkMarketQuestion]);
+      touchGame();
     }
   }
 
@@ -134,12 +144,27 @@ export default function StalkMarketEditPage({
     setQuestions((qs) => qs.map((q) => (q.id === id ? { ...q, prompt } : q)));
     const supabase = createClient();
     await supabase.from("stalk_market_questions").update({ prompt }).eq("id", id);
+    touchGame();
+  }
+
+  async function updateQuestionPreloadedAnswer(id: string, value: string) {
+    const next = value.trim() ? value : null;
+    setQuestions((qs) =>
+      qs.map((q) => (q.id === id ? { ...q, preloaded_answer: next } : q))
+    );
+    const supabase = createClient();
+    await supabase
+      .from("stalk_market_questions")
+      .update({ preloaded_answer: next })
+      .eq("id", id);
+    touchGame();
   }
 
   async function deleteQuestion(id: string) {
     const supabase = createClient();
     await supabase.from("stalk_market_questions").delete().eq("id", id);
     setQuestions((qs) => qs.filter((q) => q.id !== id));
+    touchGame();
   }
 
   async function moveQuestion(id: string, dir: -1 | 1) {
@@ -158,6 +183,7 @@ export default function StalkMarketEditPage({
           .eq("id", q.id)
       )
     );
+    touchGame();
   }
 
   async function regenerateSpotlightToken() {
@@ -687,6 +713,30 @@ export default function StalkMarketEditPage({
                       onBlur={(e) => updateQuestionPrompt(q.id, e.target.value)}
                       placeholder='e.g., "What did you want to be when you were 8?"'
                     />
+                    {mode === "preloaded" && (
+                      <div className="mt-2">
+                        <label className="block text-[11px] font-semibold uppercase tracking-wider text-smoke mb-1">
+                          Spotlight&apos;s answer
+                        </label>
+                        <Input
+                          variant="paper"
+                          value={q.preloaded_answer || ""}
+                          onChange={(e) =>
+                            setQuestions((qs) =>
+                              qs.map((qq) =>
+                                qq.id === q.id
+                                  ? { ...qq, preloaded_answer: e.target.value }
+                                  : qq
+                              )
+                            )
+                          }
+                          onBlur={(e) =>
+                            updateQuestionPreloadedAnswer(q.id, e.target.value)
+                          }
+                          placeholder="What the Spotlight would honestly answer"
+                        />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

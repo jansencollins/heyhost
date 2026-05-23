@@ -92,9 +92,10 @@ export default function DashboardPage() {
       const list: Game[] = gamesData || [];
       setGames(list);
 
-      // Batched counts: questions for trivia, items for price-is-right.
+      // Batched counts: questions for trivia + stalk market, items for price-is-right.
       const triviaIds = list.filter((g) => g.game_type === "trivia").map((g) => g.id);
       const pirIds = list.filter((g) => g.game_type === "price_is_right").map((g) => g.id);
+      const smIds = list.filter((g) => g.game_type === "stalk_market").map((g) => g.id);
       const counts: Record<string, number> = {};
       if (triviaIds.length > 0) {
         const { data: qRows } = await supabase
@@ -111,6 +112,15 @@ export default function DashboardPage() {
           .select("game_id")
           .in("game_id", pirIds);
         iRows?.forEach((r: { game_id: string }) => {
+          counts[r.game_id] = (counts[r.game_id] || 0) + 1;
+        });
+      }
+      if (smIds.length > 0) {
+        const { data: sRows } = await supabase
+          .from("stalk_market_questions")
+          .select("game_id")
+          .in("game_id", smIds);
+        sRows?.forEach((r: { game_id: string }) => {
           counts[r.game_id] = (counts[r.game_id] || 0) + 1;
         });
       }
