@@ -119,10 +119,11 @@ async function startGame(supabase: SB, sessionId: string) {
     (a: any, b: any) => a.question_order - b.question_order
   );
   if (questions.length === 0) throw new Error("No questions in game");
-  if (!session.sm_spotlight_player_id) throw new Error("Spotlight not set");
+  const mode = game.sm_game_mode as "live" | "preloaded";
+  if (mode === "live" && !session.sm_spotlight_player_id)
+    throw new Error("Spotlight not set");
 
   const first = questions[0];
-  const mode = game.sm_game_mode as "live" | "preloaded";
 
   const update: Record<string, unknown> = {
     status: "playing",

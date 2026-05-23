@@ -208,11 +208,13 @@ export default function StalkMarketHostRemote({ sessionId, devMode }: Props) {
           sessionId={sessionId}
           players={players}
           spotlightId={session.sm_spotlight_player_id}
+          isPreloaded={game.sm_game_mode === "preloaded"}
           onSetSpotlight={(playerId) => api("set_spotlight", { playerId })}
           onKickPlayer={kickPlayer}
           onStart={() => api("start_game")}
           canStart={
-            !!session.sm_spotlight_player_id &&
+            (game.sm_game_mode === "preloaded" ||
+              !!session.sm_spotlight_player_id) &&
             bettors.length >= 1 &&
             questions.length > 0
           }
@@ -354,6 +356,7 @@ function LobbyControls(props: {
   sessionId: string;
   players: SessionPlayer[];
   spotlightId: string | null;
+  isPreloaded: boolean;
   onSetSpotlight: (id: string | null) => void;
   onKickPlayer: (playerId: string) => void;
   onStart: () => void;
@@ -368,9 +371,13 @@ function LobbyControls(props: {
   });
   return (
     <>
-      <RemoteSection title="Pick the Spotlight">
+      <RemoteSection
+        title={props.isPreloaded ? "Players" : "Pick the Spotlight"}
+      >
         <p className="text-[11px] text-zinc-500 mb-2">
-          Tap who&apos;s in the spotlight tonight.
+          {props.isPreloaded
+            ? "Spotlight answers are pre-loaded — every player is a bettor."
+            : "Tap who's in the spotlight tonight."}
         </p>
         {ordered.length === 0 ? (
           <p className="text-xs text-zinc-500 italic text-center py-2">
@@ -383,9 +390,14 @@ function LobbyControls(props: {
                 key={p.id}
                 name={p.display_name}
                 color={p.avatar_color}
-                active={p.id === props.spotlightId}
-                onClick={() =>
-                  props.onSetSpotlight(p.id === props.spotlightId ? null : p.id)
+                active={!props.isPreloaded && p.id === props.spotlightId}
+                onClick={
+                  props.isPreloaded
+                    ? undefined
+                    : () =>
+                        props.onSetSpotlight(
+                          p.id === props.spotlightId ? null : p.id
+                        )
                 }
                 onKick={() => props.onKickPlayer(p.id)}
               />
@@ -401,7 +413,7 @@ function LobbyControls(props: {
       >
         {props.canStart
           ? "Start Game"
-          : !props.spotlightId
+          : !props.isPreloaded && !props.spotlightId
             ? "Pick a Spotlight first"
             : "Need at least 1 bettor"}
       </RemoteButton>
