@@ -1108,7 +1108,7 @@ function RevealScreen({
       <div className="flex-1 flex flex-col w-full max-w-6xl mx-auto mt-4 px-4 min-h-0 overflow-hidden">
         {/* Spotlight answer */}
         <p
-          className="text-5xl font-bold tracking-tight text-center mb-4 shrink-0"
+          className="text-5xl font-bold tracking-tight text-center mb-8 shrink-0"
           style={{
             color: theme.accent,
             fontFamily: getFontFamily(theme.headingFont),
@@ -1117,25 +1117,11 @@ function RevealScreen({
           {spotlightAnswer || "—"}
         </p>
 
-        {/* Correct / Wrong cards side by side. Split adapts to counts so the
-            layout doesn't waste space when one side is sparse. */}
-        {(() => {
-          // 1:1 when wrong isn't dominating, otherwise lean 1:2 toward wrong.
-          const useEqualSplit =
-            correctBets.length > 0 &&
-            wrongBets.length <= correctBets.length * 2;
-          const outerCols = useEqualSplit ? "1fr 1fr" : "1fr 2fr";
-          // Cap row height only when very sparse so 1-3 items don't balloon;
-          // otherwise let rows fill (1fr) so 5-15 items look properly sized.
-          const correctRowMax = correctBets.length <= 3 ? "90px" : "1fr";
-          const wrongRowMax = wrongBets.length <= 4 ? "90px" : "1fr";
-          return (
-        <div
-          className="flex-1 min-h-0 grid gap-4 overflow-hidden"
-          style={{ gridTemplateColumns: outerCols }}
-        >
-          {/* Correct */}
-          <div
+        {/* Two full-width rows stacked. Each answer renders as an auto-width
+            badge wrapping in a flex row. */}
+        <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
+          {/* Correct row */}
+          <section
             className="rounded-xl p-4 flex flex-col overflow-hidden"
             style={{
               background: `linear-gradient(180deg, ${theme.accent}22 0%, ${theme.accent}08 100%)`,
@@ -1143,7 +1129,7 @@ function RevealScreen({
             }}
           >
             <p
-              className="text-base font-bold mb-3 inline-flex items-center gap-2 shrink-0"
+              className="text-base font-bold mb-3 flex items-center justify-center gap-2 shrink-0"
               style={{ color: theme.accent }}
             >
               <span>✓</span>
@@ -1154,73 +1140,54 @@ function RevealScreen({
                 Nobody got this one.
               </p>
             ) : (
-              <div
-                className="flex-1 min-h-0 overflow-y-auto grid gap-1.5"
-                style={{
-                  gridAutoRows: `minmax(44px, ${correctRowMax})`,
-                  alignContent: correctRowMax === "1fr" ? "stretch" : "center",
-                }}
-              >
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-wrap gap-2 content-start justify-center">
                 {correctBets.map((b) => {
                   const p = findPlayer(b.player_id);
                   if (!p) return null;
                   return (
-                    <div
+                    <span
                       key={b.id}
-                      className="flex items-center gap-2 px-2.5 rounded-md overflow-hidden"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full"
                       style={{
                         background: cardGradient(theme),
                         border: `1px solid ${theme.border}`,
-                        containerType: "size",
                       }}
                     >
                       <span
-                        className="rounded-full flex items-center justify-center font-bold shrink-0"
-                        style={{
-                          background: p.avatar_color,
-                          color: "#ffffff",
-                          width: "clamp(20px, 55cqh, 40px)",
-                          height: "clamp(20px, 55cqh, 40px)",
-                          fontSize: "clamp(9px, 25cqh, 16px)",
-                        }}
+                        className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+                        style={{ background: p.avatar_color, color: "#ffffff" }}
                       >
                         {(p.display_name || "?").charAt(0).toUpperCase()}
                       </span>
                       <span
-                        className="flex-1 font-semibold truncate"
-                        style={{
-                          color: theme.textPrimary,
-                          fontSize: "clamp(11px, 36cqh, 22px)",
-                        }}
+                        className="font-semibold text-base"
+                        style={{ color: theme.textPrimary }}
                       >
                         {p.display_name}
                       </span>
                       <span
-                        className="font-bold tabular-nums"
-                        style={{
-                          color: theme.accent,
-                          fontSize: "clamp(11px, 36cqh, 22px)",
-                        }}
+                        className="font-bold tabular-nums text-base"
+                        style={{ color: theme.accent }}
                       >
                         ${b.chips * 10}
                       </span>
-                    </div>
+                    </span>
                   );
                 })}
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Wrong */}
-          <div
-            className="rounded-xl p-3 flex flex-col overflow-hidden"
+          {/* Wrong row */}
+          <section
+            className="rounded-xl p-4 flex flex-col overflow-hidden"
             style={{
               background: cardGradient(theme),
               border: `1px solid ${theme.border}`,
             }}
           >
             <p
-              className="text-base font-bold mb-2 inline-flex items-center gap-2 shrink-0"
+              className="text-base font-bold mb-3 flex items-center justify-center gap-2 shrink-0"
               style={{ color: theme.textPrimary }}
             >
               <span style={{ color: theme.danger }}>✗</span>
@@ -1231,120 +1198,45 @@ function RevealScreen({
                 No wrong bets.
               </p>
             ) : (
-              <div
-                className="flex-1 min-h-0 overflow-y-auto grid gap-1.5"
-                style={{
-                  // Columns auto-fit to width — few items → fewer wider cells,
-                  // many items → more tighter cells.
-                  gridTemplateColumns: `repeat(auto-fit, minmax(${useEqualSplit ? 160 : 180}px, 1fr))`,
-                  gridAutoRows: `minmax(40px, ${wrongRowMax})`,
-                  alignContent: wrongRowMax === "1fr" ? "stretch" : "center",
-                }}
-              >
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-wrap gap-2 content-start justify-center">
                 {wrongBets.map((b) => {
                   const p = findPlayer(b.player_id);
                   if (!p) return null;
-                  const stacked = wrongBets.length < 16;
-                  if (stacked) {
-                    return (
-                      <div
-                        key={b.id}
-                        className="rounded-md px-2 py-1 flex flex-col justify-center gap-0.5 min-w-0 overflow-hidden"
-                        style={{
-                          background: `${theme.textPrimary}06`,
-                          border: `1px solid ${theme.border}`,
-                          containerType: "size",
-                        }}
-                      >
-                        <span
-                          className="font-semibold truncate"
-                          style={{
-                            color: theme.textPrimary,
-                            fontSize: "clamp(11px, 36cqh, 20px)",
-                          }}
-                        >
-                          {b.guess_text}
-                        </span>
-                        <span
-                          className="inline-flex items-center gap-1 min-w-0"
-                          style={{
-                            color: theme.textMuted,
-                            fontSize: "clamp(8px, 22cqh, 13px)",
-                          }}
-                        >
-                          <span
-                            className="rounded-full shrink-0"
-                            style={{
-                              background: p.avatar_color,
-                              width: "clamp(4px, 8cqh, 8px)",
-                              height: "clamp(4px, 8cqh, 8px)",
-                            }}
-                          />
-                          <span className="truncate flex-1">{p.display_name}</span>
-                          <span
-                            className="tabular-nums shrink-0 font-semibold"
-                            style={{ color: theme.textPrimary }}
-                          >
-                            ${b.chips * 10}
-                          </span>
-                        </span>
-                      </div>
-                    );
-                  }
                   return (
-                    <div
+                    <span
                       key={b.id}
-                      className="rounded-md px-2 flex items-center gap-2 min-w-0 overflow-hidden"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full"
                       style={{
-                        background: `${theme.textPrimary}06`,
+                        background: `${theme.textPrimary}08`,
                         border: `1px solid ${theme.border}`,
-                        containerType: "size",
                       }}
                     >
                       <span
-                        className="font-semibold truncate flex-1"
-                        style={{
-                          color: theme.textPrimary,
-                          fontSize: "clamp(10px, 32cqh, 18px)",
-                        }}
+                        className="font-semibold text-base"
+                        style={{ color: theme.textPrimary }}
                       >
                         {b.guess_text}
                       </span>
-                      <span
-                        className="inline-flex items-center gap-1 shrink-0"
-                        style={{
-                          color: theme.textMuted,
-                          fontSize: "clamp(8px, 22cqh, 13px)",
-                        }}
-                      >
+                      <span className="inline-flex items-center gap-1.5 text-sm" style={{ color: theme.textMuted }}>
                         <span
-                          className="rounded-full"
-                          style={{
-                            background: p.avatar_color,
-                            width: "clamp(4px, 8cqh, 8px)",
-                            height: "clamp(4px, 8cqh, 8px)",
-                          }}
+                          className="w-2 h-2 rounded-full"
+                          style={{ background: p.avatar_color }}
                         />
-                        <span className="truncate max-w-[60px]">{p.display_name}</span>
+                        <span>{p.display_name}</span>
                       </span>
                       <span
-                        className="tabular-nums shrink-0 font-semibold"
-                        style={{
-                          color: theme.textPrimary,
-                          fontSize: "clamp(8px, 22cqh, 13px)",
-                        }}
+                        className="font-bold tabular-nums text-base"
+                        style={{ color: theme.textPrimary }}
                       >
                         ${b.chips * 10}
                       </span>
-                    </div>
+                    </span>
                   );
                 })}
               </div>
             )}
-          </div>
+          </section>
         </div>
-          );
-        })()}
       </div>
     </div>
   );
@@ -1535,7 +1427,7 @@ function CrashScreen({
             return (
               <div
                 key={p.id}
-                className="rounded-lg px-3 py-2 flex items-center justify-between gap-2 transition-opacity"
+                className="rounded-lg px-4 py-3 flex items-center justify-between gap-3 transition-opacity"
                 style={{
                   background: up
                     ? `linear-gradient(180deg, color-mix(in srgb, ${theme.accent} 22%, ${theme.bg}) 0%, color-mix(in srgb, ${theme.accent} 8%, ${theme.bg}) 100%)`
@@ -1544,13 +1436,13 @@ function CrashScreen({
                   opacity: cashed ? 1 : 0.45,
                 }}
               >
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <span
-                    className="w-2 h-2 rounded-full shrink-0"
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ background: p.avatar_color }}
                   />
                   <span
-                    className="font-medium truncate"
+                    className="font-semibold truncate text-lg"
                     style={{ color: theme.textPrimary }}
                   >
                     {p.display_name}
@@ -1558,7 +1450,7 @@ function CrashScreen({
                 </div>
                 {cashed ? (
                   <span
-                    className="font-bold tabular-nums shrink-0 text-sm"
+                    className="font-bold tabular-nums shrink-0 text-xl"
                     style={{
                       color: up ? theme.accent : wipe ? theme.danger : theme.textPrimary,
                     }}
@@ -1570,7 +1462,7 @@ function CrashScreen({
                   </span>
                 ) : (
                   <span
-                    className="text-xs italic shrink-0"
+                    className="text-base italic shrink-0"
                     style={{ color: theme.textMuted }}
                   >
                     Holding…
