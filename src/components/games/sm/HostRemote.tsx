@@ -11,7 +11,7 @@ import {
   RemoteButton,
   RemotePlayerRow,
 } from "@/components/games/host/RemoteUI";
-import { formatCents, normalizeGuess } from "@/lib/sm-scoring";
+import { formatCents } from "@/lib/sm-scoring";
 import { useServerTimeOffset } from "@/lib/server-time";
 import type {
   Game,
@@ -267,51 +267,47 @@ export default function StalkMarketHostRemote({ sessionId, devMode }: Props) {
         {phase === "investing" && (
         <InvestingControls
           bets={currentBets}
-          bettorCount={bettors.length}
+          bettors={bettors}
           endsAt={session.sm_phase_end_timestamp}
           players={players}
           spotlightAnswer={session.sm_current_spotlight_answer || ""}
           judging={judging}
-          onMark={async (guess_text, is_correct) => {
+          onMark={async (betId, is_correct) => {
             if (!currentQuestion) return;
-            setJudging(guess_text);
+            setJudging(betId);
             await api("mark_guesses", {
               questionId: currentQuestion.id,
-              decisions: [{ guess_text, is_correct }],
+              decisions: [{ betId, is_correct }],
             });
             setJudging(null);
           }}
+          onReopenBets={async (playerId) => {
+            if (!currentQuestion) return;
+            await api("reopen_bets", {
+              questionId: currentQuestion.id,
+              playerId,
+            });
+          }}
           onStartTimer={() => api("start_investing_timer")}
-          onAdjudicate={() => api("open_adjudication")}
+          onReveal={() => api("reveal")}
           busy={busy}
         />
       )}
 
-        {phase === "adjudication" && currentQuestion && (
-          <AdjudicationControls
-            question={currentQuestion}
-            spotlightAnswer={session.sm_current_spotlight_answer || ""}
-            bets={currentBets}
-            players={players}
-            judging={judging}
-            onMark={async (guess_text, is_correct) => {
-              setJudging(guess_text);
-              await api("mark_guesses", {
-                questionId: currentQuestion.id,
-                decisions: [{ guess_text, is_correct }],
-              });
-              setJudging(null);
-            }}
-            onReveal={() => api("reveal")}
-            busy={busy}
-          />
-        )}
-
-        {phase === "reveal" && (
+        {phase === "reveal" && currentQuestion && (
           <RevealControls
             bets={currentBets}
             players={players}
             spotlightAnswer={session.sm_current_spotlight_answer || ""}
+            judging={judging}
+            onMark={async (betId, is_correct) => {
+              setJudging(betId);
+              await api("mark_guesses", {
+                questionId: currentQuestion.id,
+                decisions: [{ betId, is_correct }],
+              });
+              setJudging(null);
+            }}
             onAdvance={() => api("advance_to_leaderboard")}
             onTriggerCrash={() => api("trigger_crash")}
             busy={busy}
@@ -475,18 +471,21 @@ function RoundBar(props: {
 
 function InvestingControls(props: {
   bets: StalkMarketBet[];
-  bettorCount: number;
+  bettors: SessionPlayer[];
   endsAt: string | null;
   players: SessionPlayer[];
   spotlightAnswer: string;
   judging: string | null;
-  onMark: (guess_text: string, is_correct: boolean) => void;
+  onMark: (betId: string, is_correct: boolean) => void;
+  onReopenBets: (playerId: string) => void | Promise<void>;
   onStartTimer: () => void;
-  onAdjudicate: () => void;
+  onReveal: () => void;
   busy: boolean;
 }) {
   const submittedPlayerIds = new Set(props.bets.map((b) => b.player_id));
   const submittedCount = submittedPlayerIds.size;
+  const bettorCount = props.bettors.length;
+  const undecidedCount = props.bets.filter((b) => b.is_correct === null).length;
   const offset = useServerTimeOffset();
   const [now, setNow] = useState(() => Date.now() + offset);
   useEffect(() => {
@@ -499,40 +498,56 @@ function InvestingControls(props: {
     ? Math.max(0, new Date(props.endsAt).getTime() - now)
     : 0;
   const remainingS = Math.ceil(remainingMs / 1000);
-  const clusters = useGuessClusters(props.bets);
   const pct =
-    props.bettorCount === 0
+    bettorCount === 0
       ? 0
-      : Math.min(100, (submittedCount / props.bettorCount) * 100);
+      : Math.min(100, (submittedCount / bettorCount) * 100);
+  // Players who have already locked in — host can reopen each one's bet so they
+  // can re-submit if they hit Lock too early. Collapsed by default since it's
+  // rarely needed.
+  const submittedBettors = props.bettors.filter((b) =>
+    submittedPlayerIds.has(b.id)
+  );
+  const [lockedOpen, setLockedOpen] = useState(false);
+
   return (
     <>
+      {/* Tight one-line status strip: timer left, submitted right, with spotlight
+          answer + progress underneath. Same info as before but less chrome. */}
       <section
         className="rounded-xl px-3 py-2 mb-2"
         style={{
           background: "linear-gradient(180deg, #181818 0%, #0e0e0e 100%)",
           border: "1px solid rgba(255,255,255,0.05)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03), 0 1px 2px rgba(0,0,0,0.4)",
         }}
       >
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-              Investing · {submittedCount}/{props.bettorCount}
-            </p>
-            {props.spotlightAnswer && (
-              <p className="text-sm leading-tight mt-0.5">
-                <span className="text-zinc-500">★ </span>
-                <span className="font-bold text-amber-400">{props.spotlightAnswer}</span>
-              </p>
-            )}
-          </div>
           <span
-            className="text-2xl font-bold tabular-nums shrink-0"
+            className="text-3xl font-bold tabular-nums leading-none"
             style={{ color: timerStarted ? "#f4f4f5" : "#52525b" }}
           >
             {timerStarted ? `${remainingS}s` : "—"}
           </span>
+          <div className="text-right leading-tight">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 font-semibold">
+              Submitted
+            </p>
+            <p className="text-sm font-bold tabular-nums text-zinc-100">
+              {submittedCount} / {bettorCount}
+            </p>
+          </div>
         </div>
+        {props.spotlightAnswer && (
+          <p
+            className="text-[11px] mt-1.5 truncate"
+            title={props.spotlightAnswer}
+          >
+            <span className="text-zinc-500 mr-1">★ Spotlight said</span>
+            <span className="font-bold text-amber-400">
+              {props.spotlightAnswer}
+            </span>
+          </p>
+        )}
         <div
           className="h-1 mt-2 rounded-full overflow-hidden"
           style={{ background: "rgba(255,255,255,0.06)" }}
@@ -543,6 +558,7 @@ function InvestingControls(props: {
           />
         </div>
       </section>
+
       {!timerStarted ? (
         <RemoteButton
           onClick={props.onStartTimer}
@@ -554,19 +570,68 @@ function InvestingControls(props: {
         </RemoteButton>
       ) : (
         <>
+          {/* Locked-in players — collapsed accordion. One tap to manage if
+              someone hit Lock too early. */}
+          {submittedBettors.length > 0 && (
+            <section className="mb-2 rounded-xl overflow-hidden border border-white/5 bg-white/[0.02]">
+              <button
+                type="button"
+                onClick={() => setLockedOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/[0.03] transition"
+              >
+                <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">
+                  {submittedBettors.length} locked in
+                </span>
+                <span className="text-xs text-zinc-500">
+                  {lockedOpen ? "Hide" : "Manage"} {lockedOpen ? "▴" : "▾"}
+                </span>
+              </button>
+              {lockedOpen && (
+                <ul className="px-2 pb-2 space-y-1 border-t border-white/5 pt-2">
+                  {submittedBettors.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-white/[0.03]"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ background: p.avatar_color }}
+                        />
+                        <span className="text-sm text-zinc-100 truncate">
+                          {p.display_name}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => props.onReopenBets(p.id)}
+                        disabled={props.busy}
+                        className="text-[11px] font-semibold px-2 py-1 rounded-full bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 disabled:opacity-50 transition"
+                      >
+                        ↺ Reopen
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           <GuessClusters
-            clusters={clusters}
+            bets={props.bets}
             players={props.players}
             judging={props.judging}
             onMark={props.onMark}
           />
+
           <RemoteButton
-            onClick={props.onAdjudicate}
+            onClick={props.onReveal}
             disabled={props.busy}
             size="md"
             className="w-full mt-2 whitespace-nowrap"
           >
-            Close Investing & Grade
+            Reveal Payouts
+            {undecidedCount > 0 && ` · ${undecidedCount} unmarked → wrong`}
           </RemoteButton>
         </>
       )}
@@ -591,193 +656,66 @@ function XIcon({ className = "" }: { className?: string }) {
   );
 }
 
-interface GuessCluster {
-  guess_text: string;
-  normalized: string;
-  totalChips: number;
-  betsByPlayer: { player_id: string; chips: number }[];
-  is_correct: boolean | null;
-}
-
-function useGuessClusters(bets: StalkMarketBet[]): GuessCluster[] {
-  return useMemo(() => {
-    const map = new Map<string, GuessCluster>();
-    for (const b of bets) {
-      const norm = normalizeGuess(b.guess_text);
-      const existing = map.get(norm);
-      if (existing) {
-        existing.totalChips += b.chips;
-        existing.betsByPlayer.push({
-          player_id: b.player_id,
-          chips: b.chips,
-        });
-        // Coalesce is_correct: if any decided, take that; mixed is unusual
-        if (existing.is_correct === null && b.is_correct !== null) {
-          existing.is_correct = b.is_correct;
-        }
-      } else {
-        map.set(norm, {
-          guess_text: b.guess_text,
-          normalized: norm,
-          totalChips: b.chips,
-          betsByPlayer: [{ player_id: b.player_id, chips: b.chips }],
-          is_correct: b.is_correct,
-        });
-      }
-    }
-    return Array.from(map.values()).sort(
-      (a, b) => b.totalChips - a.totalChips
-    );
-  }, [bets]);
-}
 
 function GuessClusters(props: {
-  clusters: GuessCluster[];
+  bets: StalkMarketBet[];
   players: SessionPlayer[];
+  /** Bet id currently being POSTed so we can disable that row. */
   judging: string | null;
-  onMark: (guess_text: string, is_correct: boolean) => void;
+  onMark: (betId: string, is_correct: boolean) => void;
 }) {
   const playerName = (id: string) =>
     props.players.find((p) => p.id === id)?.display_name || "?";
-  // Flatten clusters into one row per bet so each player's guess is visible
-  // on its own line. Marking still routes by guess_text — the server marks
-  // every bet sharing that normalized text, so identical guesses flip together.
-  const rows = props.clusters.flatMap((c) =>
-    c.betsByPlayer.map((b, i) => ({
-      key: `${c.normalized}-${b.player_id}-${i}`,
-      guess_text: c.guess_text,
-      normalized: c.normalized,
-      player_name: playerName(b.player_id),
-      chips: b.chips,
-      is_correct: c.is_correct,
-    }))
-  );
+  // One row per individual bet, single line, tap-to-flip. Ungraded bets read as
+  // "wrong" visually (matching how the server treats null on reveal).
+  const rows = [...props.bets].sort((a, b) => b.chips - a.chips);
   if (rows.length === 0) {
     return <p className="text-sm text-zinc-500 italic">No guesses yet.</p>;
   }
   return (
     <div className="space-y-1.5">
       {rows.map((r) => {
-        const isMatch = r.is_correct === true;
-        const isNo = r.is_correct === false;
-        const decided = r.is_correct !== null;
+        const isCorrect = r.is_correct === true;
         return (
-          <div
-            key={r.key}
-            className={`rounded-lg border px-2.5 py-1.5 transition ${
-              isMatch ? "border-emerald-500/50" : "border-white/5"
-            }`}
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => props.onMark(r.id, !isCorrect)}
+            disabled={props.judging === r.id}
+            aria-pressed={isCorrect}
+            title={isCorrect ? "Tap to mark wrong" : "Tap to mark correct"}
+            className="w-full text-left rounded-lg border px-3 py-2 transition disabled:opacity-50 flex items-center gap-2.5 min-w-0"
             style={{
-              background: isMatch
-                ? "linear-gradient(180deg, rgba(16,185,129,0.10) 0%, rgba(16,185,129,0.04) 100%)"
-                : isNo
-                  ? "linear-gradient(180deg, #0a0a0a 0%, #060606 100%)"
-                  : "linear-gradient(180deg, #141414 0%, #0a0a0a 100%)",
-              opacity: isNo ? 0.55 : 1,
+              background: isCorrect
+                ? "linear-gradient(180deg, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.04) 100%)"
+                : "linear-gradient(180deg, #141414 0%, #0a0a0a 100%)",
+              borderColor: isCorrect
+                ? "rgba(16,185,129,0.55)"
+                : "rgba(255,255,255,0.08)",
             }}
           >
-            <div className="flex items-center gap-2 min-w-0">
-              {decided && (
-                <span
-                  className={`shrink-0 ${
-                    isMatch ? "text-emerald-400" : "text-zinc-500"
-                  }`}
-                >
-                  {isMatch ? <CheckIcon className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
-                </span>
-              )}
-              <p className="font-semibold text-zinc-100 leading-snug flex-1 break-words">
-                {r.guess_text}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-white/5">
-              <p className="text-xs text-zinc-500 truncate flex-1">
-                {r.player_name}
-              </p>
-              <span className="shrink-0 text-xs text-zinc-400 tabular-nums">
-                {formatCents(r.chips * 1000)}
-              </span>
-              {decided ? (
-                <button
-                  type="button"
-                  onClick={() => props.onMark(r.guess_text, !isMatch)}
-                  disabled={props.judging === r.guess_text}
-                  title={isMatch ? "Mark as incorrect" : "Mark as correct"}
-                  className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition disabled:opacity-50 ${
-                    isMatch
-                      ? "text-zinc-400 bg-white/5 hover:bg-white/10"
-                      : "text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/25"
-                  }`}
-                >
-                  {isMatch ? <XIcon className="w-4 h-4" /> : <CheckIcon className="w-4 h-4" />}
-                </button>
+            <span
+              className={`shrink-0 ${isCorrect ? "text-emerald-400" : "text-zinc-500"}`}
+            >
+              {isCorrect ? (
+                <CheckIcon className="w-4 h-4" />
               ) : (
-                <div className="flex gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => props.onMark(r.guess_text, true)}
-                    disabled={props.judging === r.guess_text}
-                    title="Mark as correct"
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/25 transition disabled:opacity-50"
-                  >
-                    <CheckIcon className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => props.onMark(r.guess_text, false)}
-                    disabled={props.judging === r.guess_text}
-                    title="Mark as incorrect"
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 bg-white/5 hover:bg-white/10 transition disabled:opacity-50"
-                  >
-                    <XIcon className="w-4 h-4" />
-                  </button>
-                </div>
+                <XIcon className="w-4 h-4" />
               )}
-            </div>
-          </div>
+            </span>
+            <span className="font-semibold text-zinc-100 truncate flex-1 min-w-0">
+              {r.guess_text}
+            </span>
+            <span className="text-xs text-zinc-500 truncate max-w-[80px] shrink-0">
+              {playerName(r.player_id)}
+            </span>
+            <span className="text-xs text-zinc-300 tabular-nums shrink-0 font-semibold">
+              {formatCents(r.chips * 1000)}
+            </span>
+          </button>
         );
       })}
     </div>
-  );
-}
-
-function AdjudicationControls(props: {
-  question: StalkMarketQuestion;
-  spotlightAnswer: string;
-  bets: StalkMarketBet[];
-  players: SessionPlayer[];
-  judging: string | null;
-  onMark: (guess_text: string, is_correct: boolean) => void;
-  onReveal: () => void;
-  busy: boolean;
-}) {
-  const clusters = useGuessClusters(props.bets);
-  const undecidedCount = clusters.filter((c) => c.is_correct === null).length;
-
-  return (
-    <>
-      <RemoteSection title="Spotlight said">
-        <p className="font-bold text-amber-400 text-lg">
-          {props.spotlightAnswer || "(no answer)"}
-        </p>
-      </RemoteSection>
-      <RemoteSection title="Grade guesses">
-        <GuessClusters
-          clusters={clusters}
-          players={props.players}
-          judging={props.judging}
-          onMark={props.onMark}
-        />
-      </RemoteSection>
-      <RemoteButton
-        onClick={props.onReveal}
-        disabled={props.busy}
-        size="md"
-        className="w-full whitespace-nowrap"
-      >
-        Reveal Payouts {undecidedCount > 0 && `· ${undecidedCount} unmarked → wrong`}
-      </RemoteButton>
-    </>
   );
 }
 
@@ -785,6 +723,8 @@ function RevealControls(props: {
   bets: StalkMarketBet[];
   players: SessionPlayer[];
   spotlightAnswer: string;
+  judging: string | null;
+  onMark: (betId: string, is_correct: boolean) => void;
   onAdvance: () => void;
   onTriggerCrash: () => void;
   busy: boolean;
@@ -837,6 +777,14 @@ function RevealControls(props: {
             </li>
           ))}
         </ul>
+      </RemoteSection>
+      <RemoteSection title="Corrections — flip a grade to fix payouts">
+        <GuessClusters
+          bets={props.bets}
+          players={props.players}
+          judging={props.judging}
+          onMark={props.onMark}
+        />
       </RemoteSection>
       {crashEligible && (
         <RemoteButton

@@ -405,10 +405,9 @@ function PIRHostHarness({ initialStatus }: { initialStatus: "lobby" | "playing" 
   );
 }
 
-function SMHostHarness({ initialPhase }: { initialPhase: "lobby" | "investing" | "adjudication" }) {
+function SMHostHarness({ initialPhase }: { initialPhase: "lobby" | "investing" }) {
   const [session, setSession] = useState<Session>(() => {
     if (initialPhase === "lobby") return MOCK_SM_SESSION_LOBBY;
-    if (initialPhase === "adjudication") return { ...MOCK_SM_SESSION_INVESTING, sm_phase: "adjudication", sm_current_spotlight_answer: "Astronaut" };
     return MOCK_SM_SESSION_INVESTING;
   });
   const [players, setPlayers] = useState<SessionPlayer[]>(MOCK_PLAYERS);
@@ -420,15 +419,48 @@ function SMHostHarness({ initialPhase }: { initialPhase: "lobby" | "investing" |
     if (action === "set_spotlight") {
       setSession((s) => ({ ...s, sm_spotlight_player_id: (payload?.playerId as string | null) ?? null }));
     } else if (action === "start_game") {
-      setSession((s) => ({ ...s, status: "playing", sm_phase: "spotlight_answer", sm_current_question_id: questions[0].id, sm_current_question_order: 0 }));
-    } else if (action === "open_adjudication") {
-      setSession((s) => ({ ...s, sm_phase: "adjudication" }));
-    } else if (action === "adjudicate") {
-      const guessText = (payload?.guessText as string) || "";
-      const isCorrect = !!payload?.isCorrect;
-      setBets((prev) => prev.map((b) => (b.guess_text.toLowerCase() === guessText.toLowerCase() ? { ...b, is_correct: isCorrect } : b)));
+      setSession((s) => ({ ...s, status: "playing", sm_phase: "investing", sm_current_question_id: questions[0].id, sm_current_question_order: 0, sm_phase_end_timestamp: null }));
+    } else if (action === "start_investing_timer") {
+      // Mimic the real server: countdown from the configured per-game seconds.
+      setSession((s) => ({ ...s, sm_phase_end_timestamp: new Date(Date.now() + 60_000).toISOString() }));
+    } else if (action === "mark_guesses") {
+      const decisions = (payload?.decisions as Array<{ betId: string; is_correct: boolean }>) || [];
+      const byId = new Map(decisions.map((d) => [d.betId, d.is_correct]));
+      setBets((prev) =>
+        prev.map((b) => (byId.has(b.id) ? { ...b, is_correct: byId.get(b.id)! } : b))
+      );
+    } else if (action === "reopen_bets") {
+      const playerId = payload?.playerId as string;
+      const questionId = payload?.questionId as string;
+      setBets((prev) =>
+        prev.filter(
+          (b) => !(b.player_id === playerId && b.question_id === questionId)
+        )
+      );
+    } else if (action === "reveal") {
+      // Flip phase and force every still-null bet to false, matching the server.
+      setBets((prev) =>
+        prev.map((b) => (b.is_correct === null ? { ...b, is_correct: false } : b))
+      );
+      setSession((s) => ({ ...s, sm_phase: "reveal", sm_phase_end_timestamp: null }));
+    } else if (action === "trigger_crash") {
+      setSession((s) => ({ ...s, sm_phase: "crash", sm_crash_start_timestamp: null, sm_phase_end_timestamp: null }));
+    } else if (action === "advance_to_leaderboard") {
+      setSession((s) => ({ ...s, sm_phase: "leaderboard" }));
     } else if (action === "next_question") {
-      setSession((s) => ({ ...s, sm_phase: "spotlight_answer", sm_current_question_order: (s.sm_current_question_order || 0) + 1 }));
+      const nextOrder = (session.sm_current_question_order || 0) + 1;
+      const next = questions[nextOrder];
+      if (next) {
+        setSession((s) => ({
+          ...s,
+          sm_phase: "investing",
+          sm_current_question_id: next.id,
+          sm_current_question_order: nextOrder,
+          sm_phase_end_timestamp: null,
+          sm_current_spotlight_answer: null,
+        }));
+        setBets([]);
+      }
     } else if (action === "finish_game") {
       setSession((s) => ({ ...s, status: "finished", ended_at: new Date().toISOString() }));
     } else if (action === "toggle_pause") {
@@ -437,7 +469,7 @@ function SMHostHarness({ initialPhase }: { initialPhase: "lobby" | "investing" |
       const id = payload?.playerId as string;
       setPlayers((prev) => prev.filter((p) => p.id !== id));
     }
-  }, [questions]);
+  }, [questions, session.sm_current_question_order]);
 
   return (
     <SMHostRemote
@@ -643,9 +675,6 @@ const SCREENS: ScreenDef[] = [
   { id: "smh-investing", label: "Investing", group: "SM — Host", render: () => (
     <SMHostHarness initialPhase="investing" />
   )},
-  { id: "smh-grading", label: "Grading", group: "SM — Host", render: () => (
-    <SMHostHarness initialPhase="adjudication" />
-  )},
 
   // Stalk Market Screen
   { id: "sms-lobby", label: "Lobby", group: "SM — Screen", render: () => (
@@ -690,6 +719,9 @@ export default function DevPreviewPage() {
   const [smLocked, setSmLocked] = useState(true);
   const [revealCorrect, setRevealCorrect] = useState(3);
   const [revealWrong, setRevealWrong] = useState(7);
+  // When set, overrides the SM Investing (Bettor) session's end timestamp
+  // so the tester can preview the last-10s urgency border.
+  const [smInvestingEndsAt, setSmInvestingEndsAt] = useState<number | null>(null);
 
   const current = SCREENS.find((s) => s.id === activeScreen)!;
 
@@ -918,6 +950,13 @@ export default function DevPreviewPage() {
               <div className="absolute top-2 right-2 z-10 flex gap-2">
                 <button
                   type="button"
+                  onClick={() => setSmInvestingEndsAt(Date.now() + 15_000)}
+                  className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors bg-rose-500/15 text-rose-300 border border-rose-500/40 hover:bg-rose-500/25"
+                >
+                  ▶ 15s test
+                </button>
+                <button
+                  type="button"
                   onClick={() => setSmLocked(!smLocked)}
                   className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors"
                   style={{
@@ -959,7 +998,7 @@ export default function DevPreviewPage() {
                 />
               </div>
             )}
-            <div key={`${current.id}-${badGuess}-${onTheGo}-${atRisk}-${playerCount}-${triviaCorrect}-${smLocked}-${revealCorrect}-${revealWrong}`} className={`w-full h-full ${current.group.includes("Screen") ? "overflow-hidden" : "overflow-auto"}`}>
+            <div key={`${current.id}-${badGuess}-${onTheGo}-${atRisk}-${playerCount}-${triviaCorrect}-${smLocked}-${revealCorrect}-${revealWrong}-${smInvestingEndsAt ?? ""}`} className={`w-full h-full ${current.group.includes("Screen") ? "overflow-hidden" : "overflow-auto"}`}>
               <ThemeProvider theme={selectedTheme}>
                 {current.id === "tp-results"
                   ? <TriviaPlayerPage sessionCode="DEMO" devMode={{
@@ -1017,7 +1056,9 @@ export default function DevPreviewPage() {
                   : current.id === "smp-investing-bettor"
                   ? <SMPlayerPage sessionCode="DEMO" devMode={{
                       phase: "playing",
-                      session: MOCK_SM_SESSION_INVESTING,
+                      session: smInvestingEndsAt
+                        ? { ...MOCK_SM_SESSION_INVESTING, sm_phase_end_timestamp: new Date(smInvestingEndsAt).toISOString() }
+                        : MOCK_SM_SESSION_INVESTING,
                       game: MOCK_SM_GAME,
                       player: MOCK_SM_BETTOR,
                       players: MOCK_PLAYERS,

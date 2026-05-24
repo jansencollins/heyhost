@@ -9,17 +9,8 @@ import type { ReactNode, ButtonHTMLAttributes } from "react";
 
 export function RemoteFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen w-full flex items-start justify-center bg-black p-2 sm:p-4">
-      <div
-        className="w-full max-w-md rounded-[28px] p-3 sm:p-4 text-zinc-100"
-        style={{
-          background:
-            "linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 60%, #050505 100%)",
-          boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.6), 0 20px 60px rgba(0,0,0,0.6), 0 2px 0 rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.04)",
-        }}
-      >
+    <div className="min-h-screen w-full flex items-start justify-center bg-black">
+      <div className="w-full max-w-md px-3 sm:px-4 pt-3 sm:pt-4 pb-6 text-zinc-100">
         {children}
       </div>
     </div>

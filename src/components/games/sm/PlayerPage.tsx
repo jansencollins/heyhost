@@ -1269,6 +1269,20 @@ function InvestingView({
       ];
     });
   }
+  function randomizeChips() {
+    setGuesses((gs) => {
+      if (gs.length === 0) return gs;
+      // Drop CHIPS_PER_ROUND chips one-by-one into a random bin → an
+      // unbiased random distribution that always sums to the total.
+      const counts = new Array(gs.length).fill(0);
+      for (let i = 0; i < CHIPS_PER_ROUND; i++) {
+        const idx = Math.floor(Math.random() * gs.length);
+        counts[idx]++;
+      }
+      return gs.map((g, i) => ({ ...g, chips: counts[i] }));
+    });
+    setSubmitted(false);
+  }
   function removeGuess(idx: number) {
     setGuesses((gs) => {
       const removed = gs[idx];
@@ -1353,83 +1367,115 @@ function InvestingView({
     : 0;
   const ringOffset = ringCirc * (1 - ringProgress);
 
+  // Last-10-seconds urgency: pulsing red border around the whole phone Shell.
+  const lastTenSeconds = timerStarted && remainingS <= 10 && remainingS > 0;
+
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0" style={{ color: theme.textPrimary }}>
-      {/* Status strip: countdown ring on left, allocation on right — minimal */}
+      {lastTenSeconds && (
+        <>
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none rounded-[inherit] z-[5] invest-urgency-border"
+            style={
+              {
+                "--urgency-color": theme.danger,
+              } as React.CSSProperties
+            }
+          />
+          <style>{`
+            @keyframes invest-urgency-pulse {
+              0%, 100% {
+                box-shadow:
+                  inset 0 0 0 3px color-mix(in srgb, var(--urgency-color) 70%, transparent),
+                  inset 0 0 24px color-mix(in srgb, var(--urgency-color) 35%, transparent);
+              }
+              50% {
+                box-shadow:
+                  inset 0 0 0 3px color-mix(in srgb, var(--urgency-color) 95%, transparent),
+                  inset 0 0 40px color-mix(in srgb, var(--urgency-color) 55%, transparent);
+              }
+            }
+            .invest-urgency-border {
+              animation: invest-urgency-pulse 0.9s ease-in-out infinite;
+            }
+          `}</style>
+        </>
+      )}
+      {/* Sticky header: question + timer + allocated, pinned at the top so it
+          stays visible while the guess list scrolls below. */}
       <section
-        className="rounded-xl px-3 py-2.5 flex items-center gap-3"
+        className="shrink-0 rounded-xl px-4 pt-3 pb-4"
         style={{ background: cardBg, border: `1px solid ${theme.border}` }}
       >
-        <div
-          className="relative shrink-0"
-          style={{ width: ringSize, height: ringSize }}
-        >
-          <svg
-            width={ringSize}
-            height={ringSize}
-            viewBox={`0 0 ${ringSize} ${ringSize}`}
-            aria-hidden="true"
+        <div className="flex items-start gap-3">
+          <div
+            className="relative shrink-0"
+            style={{ width: ringSize, height: ringSize }}
           >
-            <circle
-              cx={ringSize / 2}
-              cy={ringSize / 2}
-              r={ringRadius}
-              fill="none"
-              stroke={theme.border}
-              strokeWidth={ringStroke}
-            />
-            <circle
-              cx={ringSize / 2}
-              cy={ringSize / 2}
-              r={ringRadius}
-              fill="none"
-              stroke={theme.accent}
-              strokeWidth={ringStroke}
-              strokeLinecap="round"
-              strokeDasharray={ringCirc}
-              strokeDashoffset={ringOffset}
-              transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
-              style={{ transition: "stroke-dashoffset 0.4s linear" }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center leading-none">
-            <span
-              className="text-xs font-bold tabular-nums"
-              style={{ color: theme.textPrimary }}
+            <svg
+              width={ringSize}
+              height={ringSize}
+              viewBox={`0 0 ${ringSize} ${ringSize}`}
+              aria-hidden="true"
             >
-              {timerStarted ? remainingS : "—"}
-            </span>
+              <circle
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                r={ringRadius}
+                fill="none"
+                stroke={theme.border}
+                strokeWidth={ringStroke}
+              />
+              <circle
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                r={ringRadius}
+                fill="none"
+                stroke={theme.accent}
+                strokeWidth={ringStroke}
+                strokeLinecap="round"
+                strokeDasharray={ringCirc}
+                strokeDashoffset={ringOffset}
+                transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
+                style={{ transition: "stroke-dashoffset 0.4s linear" }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center leading-none">
+              <span
+                className="text-xs font-bold tabular-nums"
+                style={{ color: theme.textPrimary }}
+              >
+                {timerStarted ? remainingS : "—"}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="ml-auto text-right leading-tight">
-          <p
-            className="text-[10px] uppercase tracking-[0.14em] font-semibold"
-            style={{ color: theme.textMuted }}
-          >
-            Allocated
-          </p>
-          <p
-            className="text-base font-bold tabular-nums mt-0.5"
-            style={{
-              color: allDone ? theme.accent : theme.textPrimary,
-              fontFamily: getFontFamily(theme.headingFont),
-            }}
-          >
-            ${allocated}
-            <span
-              className="text-xs font-medium ml-0.5"
+          <div className="ml-auto text-right leading-tight shrink-0">
+            <p
+              className="text-[10px] uppercase tracking-[0.14em] font-semibold"
               style={{ color: theme.textMuted }}
             >
-              / ${CHIPS_PER_ROUND * 10}
-            </span>
-          </p>
+              Allocated
+            </p>
+            <p
+              className="text-base font-bold tabular-nums mt-0.5"
+              style={{
+                color: allDone ? theme.accent : theme.textPrimary,
+                fontFamily: getFontFamily(theme.headingFont),
+              }}
+            >
+              ${allocated}
+              <span
+                className="text-xs font-medium ml-0.5"
+                style={{ color: theme.textMuted }}
+              >
+                / ${CHIPS_PER_ROUND * 10}
+              </span>
+            </p>
+          </div>
         </div>
-      </section>
-
-      {/* Question — centered visual anchor, with breathing room */}
-      <div className="px-2 py-6 text-center">
         <p
-          className="text-[22px] font-bold leading-tight"
+          className="text-[18px] font-bold leading-tight text-center mt-3"
           style={{
             color: theme.textPrimary,
             fontFamily: getFontFamily(theme.headingFont),
@@ -1437,7 +1483,7 @@ function InvestingView({
         >
           {question.prompt}
         </p>
-      </div>
+      </section>
 
       {/* Guess list — each guess gets a clear input + chunky stepper */}
       <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1 space-y-2.5">
@@ -1544,7 +1590,39 @@ function InvestingView({
               background: "transparent",
             }}
           >
-            + Add another answer
+            + Add Another Answer
+          </button>
+        )}
+        {guesses.length > 1 && (
+          <button
+            onClick={randomizeChips}
+            disabled={!timerStarted}
+            title="Randomly spread your $100 across your answers"
+            className="w-full py-2.5 rounded-xl text-sm font-medium inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
+            style={{
+              color: theme.textPrimary,
+              border: `1px solid ${theme.border}`,
+              background: "transparent",
+            }}
+          >
+            <svg
+              className="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+              <circle cx="16" cy="8" r="1.2" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+              <circle cx="8" cy="16" r="1.2" fill="currentColor" />
+              <circle cx="16" cy="16" r="1.2" fill="currentColor" />
+            </svg>
+            Randomize Bet Allocation
           </button>
         )}
       </div>
@@ -1562,13 +1640,15 @@ function InvestingView({
         theme={theme}
         variant={submitted ? "outline" : "primary"}
         onClick={submit}
-        disabled={remaining !== 0 || submitted || submitting}
+        disabled={!timerStarted || remaining !== 0 || submitted || submitting}
       >
         {submitted
           ? "Locked in ✓"
-          : remaining === 0
-            ? "Lock in bets"
-            : `$${remaining * 10} left to allocate`}
+          : !timerStarted
+            ? "Waiting for host…"
+            : remaining === 0
+              ? "Lock in bets"
+              : `$${remaining * 10} left to allocate`}
       </MarketButton>
     </div>
   );
@@ -2312,7 +2392,7 @@ function LeaderboardView({
     .filter((p) => p.id !== spotlightId)
     .sort((a, b) => b.score - a.score);
   return (
-    <TickerCard theme={theme} title="Standings" tall>
+    <TickerCard theme={theme} title="Standings" tall tallAlign="top">
       <div className="space-y-1">
         {sorted.map((p, i) => {
           const isMe = p.id === meId;
@@ -2511,26 +2591,38 @@ function BetsAndStandingsTabs({
       </div>
 
       {tab === "bets" ? (
-        <TickerCard
-          theme={theme}
-          tall
-          tallAlign="top"
-          title="Running total"
-          action={
+        <section
+          className="rounded-lg p-3 flex-1 min-h-0 flex flex-col"
+          style={{
+            background: (() => {
+              const overlay = theme.mode === "dark" ? "rgb(255,255,255)" : "rgb(0,0,0)";
+              const top = `color-mix(in srgb, ${theme.bg} 92%, ${overlay})`;
+              const bottom = `color-mix(in srgb, ${theme.bg} 86%, ${overlay})`;
+              return `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
+            })(),
+            border: `1px solid ${theme.border}`,
+          }}
+        >
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <p
+              className="text-sm font-semibold"
+              style={{ color: theme.textPrimary }}
+            >
+              Running total
+            </p>
             <PriceDelta
               theme={theme}
               amount={formatDollars(me.score)}
               direction={direction}
               size="sm"
             />
-          }
-        >
+          </div>
           {rounds.length === 0 ? (
             <p className="text-xs italic" style={{ color: theme.textMuted }}>
               No bets placed yet.
             </p>
           ) : (
-            <div className="space-y-2.5">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5">
               {rounds.map((r) => {
                 const net = r.payout;
                 const rDir: "up" | "down" | "neutral" =
@@ -2609,7 +2701,7 @@ function BetsAndStandingsTabs({
               })}
             </div>
           )}
-        </TickerCard>
+        </section>
       ) : (
         <LeaderboardView
           theme={theme}

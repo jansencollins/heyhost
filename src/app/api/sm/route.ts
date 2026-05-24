@@ -9,7 +9,6 @@ import {
   resolveCrash,
   shouldCrash,
   ROUND_STAKE_CENTS,
-  CRASH_DURATION_MS,
   normalizeGuess,
   type BetInput,
 } from "@/lib/sm-scoring";
@@ -40,6 +39,8 @@ export async function POST(req: NextRequest) {
         return await openAdjudication(supabase, body.sessionId);
       case "mark_guesses":
         return await markGuesses(supabase, body);
+      case "reopen_bets":
+        return await reopenBets(supabase, body);
       case "reveal":
         return await reveal(supabase, body.sessionId);
       case "trigger_crash":
@@ -229,6 +230,26 @@ async function submitBets(
   if (!Array.isArray(bets) || bets.length === 0) throw new Error("No bets");
   if (bets.length > 5) throw new Error("Max 5 guesses");
 
+  // Investing has to be open: phase === "investing", timer started, and not
+  // already expired. Otherwise late bets could land after the host has
+  // already graded or revealed the round.
+  const { data: sessionRow } = await supabase
+    .from("sessions")
+    .select("sm_phase, sm_phase_end_timestamp")
+    .eq("id", sessionId)
+    .single();
+  if (sessionRow?.sm_phase !== "investing") {
+    throw new Error("Investing is closed");
+  }
+  if (!sessionRow?.sm_phase_end_timestamp) {
+    throw new Error("Timer hasn't started");
+  }
+  if (
+    new Date(sessionRow.sm_phase_end_timestamp).getTime() < Date.now()
+  ) {
+    throw new Error("Time's up");
+  }
+
   // Validate chip total + dedup guess texts (case-insensitive)
   const totalChips = bets.reduce((s, b) => s + b.chips, 0);
   if (totalChips !== 10) throw new Error("Must place all 10 chips");
@@ -298,34 +319,91 @@ async function openAdjudication(supabase: SB, sessionId: string) {
   return NextResponse.json({ success: true });
 }
 
-// ─── Host marks one or more unique guess strings as correct/incorrect ───
+// ─── Host marks one or more individual bets as correct/incorrect ───
+// Routes by bet id so each player's guess is graded on its own — identical
+// text from different players is NOT auto-flipped together.
 async function markGuesses(
   supabase: SB,
   body: {
     sessionId: string;
     questionId: string;
-    decisions: { guess_text: string; is_correct: boolean }[];
+    decisions: { betId: string; is_correct: boolean }[];
   }
 ) {
-  const { sessionId, questionId, decisions } = body;
+  const { decisions } = body;
   for (const d of decisions) {
-    const norm = normalizeGuess(d.guess_text);
-    const { data: rows } = await supabase
+    if (!d.betId) continue;
+    await supabase
       .from("stalk_market_bets")
-      .select("id, guess_text")
-      .eq("session_id", sessionId)
-      .eq("question_id", questionId);
-    const ids = (rows || [])
-      .filter((r) => normalizeGuess(r.guess_text) === norm)
-      .map((r) => r.id);
-    if (ids.length > 0) {
-      await supabase
-        .from("stalk_market_bets")
-        .update({ is_correct: d.is_correct })
-        .in("id", ids);
-    }
+      .update({ is_correct: d.is_correct })
+      .eq("id", d.betId);
+  }
+  // If we're already past the reveal step, recompute payouts so the host's
+  // correction immediately credits (or revokes) the right amount.
+  const session = await getSessionWithGame(supabase, body.sessionId);
+  if (session.sm_phase === "reveal" && body.questionId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const game = session.games as any;
+    const version = (game.sm_scoring_version || "pari_mutuel") as SMScoringVersion;
+    await recomputeQuestionPayouts(
+      supabase,
+      body.sessionId,
+      body.questionId,
+      version
+    );
   }
   return NextResponse.json({ success: true });
+}
+
+// ─── Host wipes a player's bets for the current question so they can re-bet ───
+async function reopenBets(
+  supabase: SB,
+  body: { sessionId: string; questionId: string; playerId: string }
+) {
+  await supabase
+    .from("stalk_market_bets")
+    .delete()
+    .eq("session_id", body.sessionId)
+    .eq("question_id", body.questionId)
+    .eq("player_id", body.playerId);
+  return NextResponse.json({ success: true });
+}
+
+// Shared payout computation — used by reveal() on first transition AND by
+// markGuesses() when the host corrects a grade after reveal already happened.
+async function recomputeQuestionPayouts(
+  supabase: SB,
+  sessionId: string,
+  questionId: string,
+  version: SMScoringVersion
+) {
+  const { data: rows } = await supabase
+    .from("stalk_market_bets")
+    .select("*")
+    .eq("session_id", sessionId)
+    .eq("question_id", questionId);
+  const bets: BetInput[] = (rows || []).map((b) => ({
+    player_id: b.player_id,
+    guess_text: b.guess_text,
+    chips: b.chips,
+    is_correct: !!b.is_correct,
+  }));
+  const payouts = computeRoundPayouts(bets, version);
+  const rowById = new Map(
+    (rows || []).map((r) => [
+      `${r.player_id}|${normalizeGuess(r.guess_text)}`,
+      r,
+    ])
+  );
+  for (const p of payouts) {
+    const key = `${p.player_id}|${normalizeGuess(p.guess_text)}`;
+    const row = rowById.get(key);
+    if (!row) continue;
+    await supabase
+      .from("stalk_market_bets")
+      .update({ payout_cents: p.payout_cents })
+      .eq("id", row.id);
+  }
 }
 
 // ─── Reveal: compute payouts, store, and decide whether to crash ───
@@ -366,18 +444,7 @@ async function reveal(supabase: SB, sessionId: string) {
 
   // Reveal always shows the payouts (or zeros) — host decides whether to
   // trigger the crash flow afterwards via `trigger_crash`.
-  const payouts = computeRoundPayouts(bets, version);
-  // Persist payout_cents per bet row (match by player_id + guess_text)
-  const rowById = new Map((betRows || []).map((r) => [`${r.player_id}|${normalizeGuess(r.guess_text)}`, r]));
-  for (const p of payouts) {
-    const key = `${p.player_id}|${normalizeGuess(p.guess_text)}`;
-    const row = rowById.get(key);
-    if (!row) continue;
-    await supabase
-      .from("stalk_market_bets")
-      .update({ payout_cents: p.payout_cents })
-      .eq("id", row.id);
-  }
+  await recomputeQuestionPayouts(supabase, sessionId, questionId, version);
 
   await supabase
     .from("sessions")
@@ -424,16 +491,15 @@ async function cashout(
   // Each player runs their own 10s timer client-side, so we trust the
   // submitted cashout_ms. Fall back to the legacy shared-start path if the
   // client didn't send one and the session has a start timestamp.
+  // Note: we do NOT clamp to CRASH_DURATION_MS — going past 10s is a wipeout
+  // but we still record the actual elapsed time so the receipt/TV can show
+  // exactly how long the player held on.
   let cashoutMs: number | null;
   if (typeof body.cashoutMs === "number" || body.cashoutMs === null) {
-    cashoutMs =
-      body.cashoutMs === null
-        ? null
-        : Math.max(0, Math.min(body.cashoutMs, CRASH_DURATION_MS));
+    cashoutMs = body.cashoutMs === null ? null : Math.max(0, body.cashoutMs);
   } else if (session.sm_crash_start_timestamp) {
     const startMs = new Date(session.sm_crash_start_timestamp).getTime();
-    const elapsedMs = Math.max(0, Date.now() - startMs);
-    cashoutMs = Math.min(elapsedMs, CRASH_DURATION_MS);
+    cashoutMs = Math.max(0, Date.now() - startMs);
   } else {
     throw new Error("Crash not started");
   }
