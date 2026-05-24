@@ -463,11 +463,14 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
                 placeholder="Enter your name"
                 maxLength={20}
                 autoFocus
-                className={`w-full text-sm font-bold text-center focus:outline-none px-3 ${inputPadY}`}
+                className={`w-full font-bold text-center focus:outline-none px-3 ${inputPadY}`}
                 style={{
                   ...getCardCss(theme),
                   color: theme.textPrimary,
                   caretColor: theme.accent,
+                  // 16px+ font-size on form inputs prevents iOS Safari from
+                  // auto-zooming when the field gets focus.
+                  fontSize: "16px",
                 }}
               />
             </div>
@@ -612,10 +615,13 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
           )}
 
         {session.status !== "finished" &&
-          session.sm_phase === "investing" &&
+          (session.sm_phase === "investing" || session.sm_phase === "adjudication") &&
           currentQuestion &&
           !isSpotlight &&
-          (myBets.length > 0 ? (
+          // Once grading has started (adjudication phase) the player can't add
+          // more bets — drop them into the locked-in waiting view even if they
+          // didn't submit, so the screen stays consistent with the TV.
+          (myBets.length > 0 || session.sm_phase === "adjudication" ? (
             <WaitingView
               theme={theme}
               me={player}
@@ -636,7 +642,7 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
           ))}
 
         {session.status !== "finished" &&
-          session.sm_phase === "investing" &&
+          (session.sm_phase === "investing" || session.sm_phase === "adjudication") &&
           isSpotlight &&
           currentQuestion && (
             <SpectatorView
@@ -646,10 +652,6 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
               }"`}
             />
           )}
-
-        {session.status !== "finished" && session.sm_phase === "adjudication" && (
-          <SpectatorView theme={theme} text="The host is grading guesses…" />
-        )}
 
         {session.status !== "finished" &&
           session.sm_phase === "reveal" &&
@@ -1142,10 +1144,13 @@ function SpotlightAnswerView({
             setSaved(false);
           }}
           placeholder="Type your honest answer…"
-          className="w-full px-3 py-2 rounded-md text-sm bg-transparent focus:outline-none min-h-[100px] flex-1"
+          className="w-full px-3 py-2 rounded-md bg-transparent focus:outline-none min-h-[100px] flex-1"
           style={{
             border: `1px solid ${theme.border}`,
             color: theme.textPrimary,
+            // 16px+ font-size on form inputs prevents iOS Safari from
+            // auto-zooming when the field gets focus.
+            fontSize: "16px",
           }}
           maxLength={200}
         />
@@ -1803,24 +1808,24 @@ function CrashView({
   players?: SessionPlayer[];
   devMode?: boolean;
 }) {
+  const offset = useServerTimeOffset();
   const [submitting, setSubmitting] = useState(false);
   const [localResult, setLocalResult] = useState<{
     saved_cents: number;
     net_cents: number;
     cashout_ms: number | null;
   } | null>(null);
-  const [devStarted, setDevStarted] = useState(false);
+  // Each player runs their own 10s — locally anchored when they tap Start.
+  const [started, setStarted] = useState(false);
   const tappedRef = useRef(false);
-  // Dev mode anchors the crash start when the player taps "Start Timer".
-  const devStartRef = useRef<number>(0);
+  const startRef = useRef<number>(0);
 
-  // Don't show a visible timer (per spec). Just GO + CASH OUT.
   async function cashout() {
     if (tappedRef.current) return;
     tappedRef.current = true;
     setSubmitting(true);
+    const elapsedMs = Date.now() + offset - startRef.current;
     if (devMode) {
-      const elapsedMs = Date.now() - devStartRef.current;
       const r = resolveCrash(playerId, elapsedMs);
       setLocalResult({
         saved_cents: r.saved_cents,
@@ -1838,6 +1843,7 @@ function CrashView({
         sessionId: session.id,
         questionId,
         playerId,
+        cashoutMs: elapsedMs,
       }),
     });
     setSubmitting(false);
@@ -1854,13 +1860,13 @@ function CrashView({
   function resetDev() {
     setLocalResult(null);
     tappedRef.current = false;
-    devStartRef.current = 0;
-    setDevStarted(false);
+    startRef.current = 0;
+    setStarted(false);
   }
 
-  function startDevTimer() {
-    devStartRef.current = Date.now();
-    setDevStarted(true);
+  function startLocalTimer() {
+    startRef.current = Date.now() + offset;
+    setStarted(true);
   }
 
   // Force-fire a wipeout: pretend the player never tapped (cashout_ms = null).
@@ -2088,118 +2094,118 @@ function CrashView({
   }
 
   const crashHeader = (
-    <TickerCard theme={theme}>
-      <div className="text-center">
-        <svg
-          className="w-7 h-7 mx-auto mb-1.5"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ color: theme.textPrimary }}
-          aria-hidden="true"
-        >
-          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-          <line x1="12" y1="9" x2="12" y2="13" />
-          <line x1="12" y1="17" x2="12.01" y2="17" />
-        </svg>
-        <p
-          className="text-lg font-bold tracking-tight"
-          style={{
-            color: theme.textPrimary,
-            fontFamily: getFontFamily(theme.headingFont),
-          }}
-        >
-          Uh oh!
-        </p>
-        <p
-          className="text-xs leading-relaxed mt-1"
-          style={{ color: theme.textMuted }}
-        >
-          The market is crashing! No successful bets were placed, but you may
-          still be able to recover some of your investment for this round.
-        </p>
-      </div>
-    </TickerCard>
+    <div
+      className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
+      style={{
+        background: `color-mix(in srgb, ${theme.danger} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${theme.danger} 35%, transparent)`,
+      }}
+    >
+      <svg
+        className="w-5 h-5 shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ color: theme.danger }}
+        aria-hidden="true"
+      >
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+      <p
+        className="text-xs leading-snug"
+        style={{ color: theme.textPrimary }}
+      >
+        <span className="font-bold">The market is crashing.</span>{" "}
+        <span style={{ color: theme.textMuted }}>
+          No successful bets were placed — try to recover what you can.
+        </span>
+      </p>
+    </div>
   );
 
-  // Dev mode: gate the GO + Cash Out screen behind an explicit Start Timer tap
-  // so the tester knows the exact moment the count begins.
-  if (devMode && !devStarted) {
+  // Show the Ready/Start screen until the player taps Start. Each player runs
+  // their own 10s timer (anchored client-side at the tap).
+  if (!started && !result) {
     return (
-      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
+      <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto">
         {crashHeader}
-        <TickerCard theme={theme}>
-          <div className="text-center space-y-3 py-2">
+        <div className="flex-1 flex flex-col">
+          <div className="text-center pt-2 pb-5">
             <p
-              className="text-base font-semibold"
-              style={{ color: theme.textPrimary }}
+              className="text-3xl font-bold tracking-tight"
+              style={{
+                color: theme.textPrimary,
+                fontFamily: getFontFamily(theme.headingFont),
+              }}
             >
               Ready?
             </p>
-            <div
-              className="text-xs leading-relaxed space-y-2 text-center"
-              style={{ color: theme.textMuted }}
-            >
-              <p>
-                When you tap Start, the market will crash in{" "}
-                <strong className="font-semibold" style={{ color: theme.textPrimary }}>
-                  exactly 10 seconds
-                </strong>
-                .
-              </p>
-              <p>
-                The problem? There&apos;s{" "}
-                <strong className="font-semibold" style={{ color: theme.textPrimary }}>
-                  no countdown clock
-                </strong>{" "}
-                and your{" "}
-                <strong className="font-semibold" style={{ color: theme.textPrimary }}>
-                  $100 for the round
-                </strong>{" "}
-                is on the line.
-              </p>
-              <p>
-                Every second you hold on, your{" "}
-                <strong className="font-semibold" style={{ color: theme.textPrimary }}>
-                  payout climbs higher
-                </strong>
-                . Cash out too early and you{" "}
-                <strong className="font-semibold" style={{ color: theme.textPrimary }}>
-                  leave money on the table
-                </strong>
-                ; wait too long and the{" "}
-                <strong className="font-semibold" style={{ color: theme.textPrimary }}>
-                  crash takes it all
-                </strong>
-                .
-              </p>
-              <p>
-                Want to risk it for the reward? Cash out between{" "}
-                <strong className="font-semibold" style={{ color: theme.textPrimary }}>
-                  9–10 seconds
-                </strong>{" "}
-                for a{" "}
-                <strong className="font-semibold" style={{ color: theme.textPrimary }}>
-                  bonus payout
-                </strong>
-                !
-              </p>
-            </div>
-            <button
-              onClick={startDevTimer}
-              className="w-full py-3 rounded-full text-sm font-semibold active:scale-[0.99] transition"
-              style={{
-                background: theme.accent,
-                color: theme.buttonTextMode === "light" ? "#ffffff" : "#1a1a1a",
-              }}
-            >
-              Start timer
-            </button>
           </div>
-        </TickerCard>
+          <div
+            className="text-sm leading-relaxed space-y-4 text-center px-1"
+            style={{ color: theme.textMuted }}
+          >
+            <p>
+              When you tap Start, the market will crash in{" "}
+              <strong className="font-semibold" style={{ color: theme.textPrimary }}>
+                exactly 10 seconds
+              </strong>
+              .
+            </p>
+            <p>
+              The problem? There&apos;s{" "}
+              <strong className="font-semibold" style={{ color: theme.textPrimary }}>
+                no countdown clock
+              </strong>{" "}
+              and your{" "}
+              <strong className="font-semibold" style={{ color: theme.textPrimary }}>
+                $100 for the round
+              </strong>{" "}
+              is on the line.
+            </p>
+            <p>
+              Every second you hold on, your{" "}
+              <strong className="font-semibold" style={{ color: theme.textPrimary }}>
+                payout climbs higher
+              </strong>
+              . Cash out too early and you{" "}
+              <strong className="font-semibold" style={{ color: theme.textPrimary }}>
+                leave money on the table
+              </strong>
+              ; wait too long and the{" "}
+              <strong className="font-semibold" style={{ color: theme.textPrimary }}>
+                crash takes it all
+              </strong>
+              .
+            </p>
+            <p>
+              Want to risk it for the reward? Cash out between{" "}
+              <strong className="font-semibold" style={{ color: theme.textPrimary }}>
+                9–10 seconds
+              </strong>{" "}
+              for a{" "}
+              <strong className="font-semibold" style={{ color: theme.textPrimary }}>
+                bonus payout
+              </strong>
+              !
+            </p>
+          </div>
+          <button
+            onClick={startLocalTimer}
+            className="w-full py-3.5 mt-6 rounded-full text-base font-semibold active:scale-[0.99] transition"
+            style={{
+              background: theme.accent,
+              color: theme.buttonTextMode === "light" ? "#ffffff" : "#1a1a1a",
+            }}
+          >
+            Start timer
+          </button>
+        </div>
       </div>
     );
   }

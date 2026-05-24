@@ -313,6 +313,7 @@ export default function StalkMarketHostRemote({ sessionId, devMode }: Props) {
             players={players}
             spotlightAnswer={session.sm_current_spotlight_answer || ""}
             onAdvance={() => api("advance_to_leaderboard")}
+            onTriggerCrash={() => api("trigger_crash")}
             busy={busy}
           />
         )}
@@ -785,6 +786,7 @@ function RevealControls(props: {
   players: SessionPlayer[];
   spotlightAnswer: string;
   onAdvance: () => void;
+  onTriggerCrash: () => void;
   busy: boolean;
 }) {
   // Compute net per player for this question
@@ -805,6 +807,10 @@ function RevealControls(props: {
       net: v.payout,
     }))
     .sort((a, b) => b.net - a.net);
+  // If nobody won anything this round, offer the crash mini-game as an
+  // alternative to the standard leaderboard advance.
+  const anyWinners = props.bets.some((b) => b.is_correct);
+  const crashEligible = props.bets.length > 0 && !anyWinners;
   return (
     <>
       <RemoteSection title="Spotlight answer">
@@ -832,6 +838,17 @@ function RevealControls(props: {
           ))}
         </ul>
       </RemoteSection>
+      {crashEligible && (
+        <RemoteButton
+          onClick={props.onTriggerCrash}
+          disabled={props.busy}
+          variant="danger"
+          size="lg"
+          className="w-full mb-2"
+        >
+          📉 Trigger Crash Alert
+        </RemoteButton>
+      )}
       <RemoteButton
         onClick={props.onAdvance}
         disabled={props.busy}

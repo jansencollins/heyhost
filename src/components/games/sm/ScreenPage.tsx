@@ -183,6 +183,7 @@ export default function StalkMarketScreenPage({ sessionCode, devMode }: Props) {
       >
         {phase !== "lobby" &&
           phase !== "investing" &&
+          phase !== "adjudication" &&
           phase !== "reveal" &&
           phase !== "leaderboard" &&
           phase !== "crash" &&
@@ -202,6 +203,7 @@ export default function StalkMarketScreenPage({ sessionCode, devMode }: Props) {
           className={`flex-1 flex flex-col min-h-0 overflow-hidden ${
             phase === "lobby" ||
             phase === "investing" ||
+            phase === "adjudication" ||
             phase === "reveal" ||
             phase === "leaderboard" ||
             phase === "crash" ||
@@ -222,27 +224,21 @@ export default function StalkMarketScreenPage({ sessionCode, devMode }: Props) {
         {phase === "spotlight_answer" && session.status !== "finished" && currentQuestion && (
           <SpotlightAnswerScreen theme={theme} question={currentQuestion} spotlight={spotlight} />
         )}
-        {phase === "investing" && session.status !== "finished" && currentQuestion && (
-          <InvestingScreen
-            theme={theme}
-            question={currentQuestion}
-            bets={bets.filter((b) => b.question_id === currentQuestion.id)}
-            bettors={bettors}
-            endsAt={session.sm_phase_end_timestamp}
-            totalSeconds={game.timer_seconds || 60}
-            gameTitle={game.title}
-            roundOrder={session.sm_current_question_order || 0}
-            totalRounds={questions.length}
-          />
-        )}
-        {phase === "adjudication" && session.status !== "finished" && currentQuestion && (
-          <AdjudicationScreen
-            theme={theme}
-            question={currentQuestion}
-            spotlightAnswer={session.sm_current_spotlight_answer || ""}
-            bets={bets.filter((b) => b.question_id === currentQuestion.id)}
-          />
-        )}
+        {(phase === "investing" || phase === "adjudication") &&
+          session.status !== "finished" &&
+          currentQuestion && (
+            <InvestingScreen
+              theme={theme}
+              question={currentQuestion}
+              bets={bets.filter((b) => b.question_id === currentQuestion.id)}
+              bettors={bettors}
+              endsAt={session.sm_phase_end_timestamp}
+              totalSeconds={game.timer_seconds || 60}
+              gameTitle={game.title}
+              roundOrder={session.sm_current_question_order || 0}
+              totalRounds={questions.length}
+            />
+          )}
         {phase === "reveal" && session.status !== "finished" && currentQuestion && (
           <RevealScreen
             theme={theme}

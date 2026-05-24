@@ -70,7 +70,14 @@ export default function PlayerSessionPage({
 
   return (
     <ThemeProvider theme={theme}>
-      <DynamicComponent sessionCode={sessionCode} />
+      {/* Fixed full-viewport bg so the global #110f25 + body-background image
+          on <body> never bleeds through the player's themed page. */}
+      <div
+        className="fixed inset-0 overflow-hidden"
+        style={{ background: theme.bg }}
+      >
+        <DynamicComponent sessionCode={sessionCode} />
+      </div>
     </ThemeProvider>
   );
 }

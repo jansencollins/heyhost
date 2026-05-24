@@ -42,6 +42,8 @@ export async function POST(req: NextRequest) {
         return await markGuesses(supabase, body);
       case "reveal":
         return await reveal(supabase, body.sessionId);
+      case "trigger_crash":
+        return await triggerCrash(supabase, body.sessionId);
       case "cashout":
         return await cashout(supabase, body);
       case "resolve_crash":
@@ -362,21 +364,8 @@ async function reveal(supabase: SB, sessionId: string) {
       );
   }
 
-  if (bets.length > 0 && shouldCrash(bets)) {
-    // Don't pay anyone out — instead enter the crash mini-game.
-    await supabase
-      .from("sessions")
-      .update({
-        sm_phase: "crash",
-        sm_crash_start_timestamp: new Date().toISOString(),
-        sm_phase_end_timestamp: new Date(
-          Date.now() + CRASH_DURATION_MS + 1500
-        ).toISOString(),
-      })
-      .eq("id", sessionId);
-    return NextResponse.json({ success: true, crashed: true });
-  }
-
+  // Reveal always shows the payouts (or zeros) — host decides whether to
+  // trigger the crash flow afterwards via `trigger_crash`.
   const payouts = computeRoundPayouts(bets, version);
   // Persist payout_cents per bet row (match by player_id + guess_text)
   const rowById = new Map((betRows || []).map((r) => [`${r.player_id}|${normalizeGuess(r.guess_text)}`, r]));
@@ -398,21 +387,56 @@ async function reveal(supabase: SB, sessionId: string) {
     })
     .eq("id", sessionId);
 
-  return NextResponse.json({ success: true, crashed: false });
+  // Tell the caller whether the round qualifies for the crash mini-game so
+  // the host remote can offer the "Show Crash Alert" button.
+  const crashEligible = bets.length > 0 && shouldCrash(bets);
+  return NextResponse.json({ success: true, crashEligible });
+}
+
+// ─── Host explicitly triggers the crash mini-game from the reveal screen ───
+async function triggerCrash(supabase: SB, sessionId: string) {
+  await supabase
+    .from("sessions")
+    .update({
+      sm_phase: "crash",
+      // No shared start timestamp — each player starts their own 10s locally.
+      sm_crash_start_timestamp: null,
+      sm_phase_end_timestamp: null,
+    })
+    .eq("id", sessionId);
+  return NextResponse.json({ success: true });
 }
 
 // ─── A bettor taps CASH OUT during the crash phase ───
 async function cashout(
   supabase: SB,
-  body: { sessionId: string; questionId: string; playerId: string }
+  body: {
+    sessionId: string;
+    questionId: string;
+    playerId: string;
+    /** Client-tracked cashout time in ms (each player runs their own 10s). */
+    cashoutMs?: number | null;
+  }
 ) {
   const session = await getSessionWithGame(supabase, body.sessionId);
   if (session.sm_phase !== "crash") throw new Error("Not in crash phase");
-  if (!session.sm_crash_start_timestamp) throw new Error("Crash not started");
 
-  const startMs = new Date(session.sm_crash_start_timestamp).getTime();
-  const elapsedMs = Math.max(0, Date.now() - startMs);
-  const cashoutMs = Math.min(elapsedMs, CRASH_DURATION_MS);
+  // Each player runs their own 10s timer client-side, so we trust the
+  // submitted cashout_ms. Fall back to the legacy shared-start path if the
+  // client didn't send one and the session has a start timestamp.
+  let cashoutMs: number | null;
+  if (typeof body.cashoutMs === "number" || body.cashoutMs === null) {
+    cashoutMs =
+      body.cashoutMs === null
+        ? null
+        : Math.max(0, Math.min(body.cashoutMs, CRASH_DURATION_MS));
+  } else if (session.sm_crash_start_timestamp) {
+    const startMs = new Date(session.sm_crash_start_timestamp).getTime();
+    const elapsedMs = Math.max(0, Date.now() - startMs);
+    cashoutMs = Math.min(elapsedMs, CRASH_DURATION_MS);
+  } else {
+    throw new Error("Crash not started");
+  }
   const result = resolveCrash(body.playerId, cashoutMs);
 
   // Upsert the crash event (prevent double-tap from creating duplicates)
