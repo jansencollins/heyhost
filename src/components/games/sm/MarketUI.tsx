@@ -131,7 +131,6 @@ export function PriceDelta({
       : direction === "down"
         ? theme.danger
         : theme.textMuted;
-  const arrow = direction === "up" ? "▲" : direction === "down" ? "▼" : "·";
   const sizes = {
     sm: "text-xs",
     md: "text-sm",
@@ -142,7 +141,6 @@ export function PriceDelta({
       className={`${sizes[size]} font-semibold inline-flex items-baseline gap-1 tabular-nums`}
       style={{ color }}
     >
-      <span className="text-[0.85em]">{arrow}</span>
       <span>{amount}</span>
       {percent && <span className="opacity-80">({percent})</span>}
     </span>

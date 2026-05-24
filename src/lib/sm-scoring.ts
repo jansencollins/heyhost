@@ -134,15 +134,18 @@ export interface CrashResult {
 /**
  * Resolve one crash mini-game cashout into saved + net.
  *
- * Math (per spec):
- *   - cashout >= 10000ms or null → wipeout: saved = 0, net = -$100
+ * The per-round $100 is a fresh allowance, not the player's own money, so
+ * the worst they can do is save $0 (net 0 for the round, never negative).
+ *
+ * Math:
+ *   - cashout >= 10000ms or null → wipeout: saved = 0, net = 0
  *   - cashout in [9000, 10000)ms → precision zone:
- *       base_saved = (cashout/10000) × 100  (in dollars)
+ *       base_saved = (cashout/10000) × 100
  *       saved = base_saved × 1.5
- *       net = saved − 100
+ *       net = saved
  *   - cashout in [0, 9000)ms → standard:
  *       saved = (cashout/10000) × 100
- *       net = saved − 100
+ *       net = saved
  */
 export function resolveCrash(
   player_id: string,
@@ -154,7 +157,7 @@ export function resolveCrash(
       player_id,
       cashout_ms,
       saved_cents: 0,
-      net_cents: -ROUND_STAKE_CENTS,
+      net_cents: 0,
     };
   }
 
@@ -170,7 +173,7 @@ export function resolveCrash(
     player_id,
     cashout_ms,
     saved_cents: savedCents,
-    net_cents: savedCents - ROUND_STAKE_CENTS,
+    net_cents: savedCents,
   };
 }
 

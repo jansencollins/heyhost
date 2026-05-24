@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
         return await submitSpotlightAnswer(supabase, body);
       case "open_investing":
         return await openInvesting(supabase, body.sessionId);
+      case "start_investing_timer":
+        return await startInvestingTimer(supabase, body.sessionId);
       case "submit_bets":
         return await submitBets(supabase, body);
       case "open_adjudication":
@@ -137,12 +139,14 @@ async function startGame(supabase: SB, sessionId: string) {
   };
 
   if (mode === "preloaded") {
-    // Skip spotlight typing — go straight to investing
+    // Skip spotlight typing — go straight to investing, host starts timer
     update.sm_phase = "investing";
-    update.sm_phase_end_timestamp = new Date(Date.now() + 60_000).toISOString();
+    update.sm_phase_end_timestamp = null;
   } else {
     update.sm_phase = "spotlight_answer";
-    update.sm_phase_end_timestamp = new Date(Date.now() + 60_000).toISOString();
+    update.sm_phase_end_timestamp = new Date(
+      Date.now() + timerMs(game)
+    ).toISOString();
   }
 
   await supabase.from("sessions").update(update).eq("id", sessionId);
@@ -177,10 +181,36 @@ async function openInvesting(supabase: SB, sessionId: string) {
     .from("sessions")
     .update({
       sm_phase: "investing",
-      sm_phase_end_timestamp: new Date(Date.now() + 60_000).toISOString(),
+      // Timer doesn't start yet — host reads the question, then taps Start.
+      sm_phase_end_timestamp: null,
     })
     .eq("id", sessionId);
   return NextResponse.json({ success: true });
+}
+
+// ─── Host explicitly starts the investing countdown ───
+async function startInvestingTimer(supabase: SB, sessionId: string) {
+  const session = await getSessionWithGame(supabase, sessionId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const game = session.games as any;
+  await supabase
+    .from("sessions")
+    .update({
+      sm_phase_end_timestamp: new Date(
+        Date.now() + timerMs(game)
+      ).toISOString(),
+    })
+    .eq("id", sessionId);
+  return NextResponse.json({ success: true });
+}
+
+// Resolve the configured seconds-per-question into ms, with a sane default
+// for older games that haven't picked a value.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function timerMs(game: any): number {
+  const raw = Number(game?.timer_seconds);
+  const seconds = Number.isFinite(raw) && raw > 0 ? raw : 60;
+  return seconds * 1000;
 }
 
 // ─── Player submits all their bets atomically (replaces any prior submission for this round) ───
@@ -479,16 +509,22 @@ async function nextQuestion(supabase: SB, sessionId: string) {
 
   const next = questions[nextOrder];
   const mode = game.sm_game_mode as "live" | "preloaded";
+  const goingToInvesting = mode === "preloaded";
   const update: Record<string, unknown> = {
     sm_current_question_id: next.id,
     sm_current_question_order: nextOrder,
     current_question_index: nextOrder,
     sm_current_spotlight_answer:
       mode === "preloaded" ? next.preloaded_answer || "" : null,
-    sm_phase_end_timestamp: new Date(Date.now() + 60_000).toISOString(),
+    // Preloaded mode skips spotlight_answer and lands in investing — wait for
+    // the host to tap Start Timer before the countdown begins. Live mode still
+    // gets the spotlight typing window straight away.
+    sm_phase_end_timestamp: goingToInvesting
+      ? null
+      : new Date(Date.now() + timerMs(game)).toISOString(),
     sm_crash_start_timestamp: null,
   };
-  update.sm_phase = mode === "preloaded" ? "investing" : "spotlight_answer";
+  update.sm_phase = goingToInvesting ? "investing" : "spotlight_answer";
 
   await supabase.from("sessions").update(update).eq("id", sessionId);
   return NextResponse.json({ success: true, finished: false });

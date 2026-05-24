@@ -300,7 +300,7 @@ export default function TriviaScreenPage({ sessionCode, devMode }: { sessionCode
   if (session.status === "lobby") {
     const joinUrl = typeof window !== "undefined" ? `${window.location.host}/play` : "heyhostgames.com/play";
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-      typeof window !== "undefined" ? `${window.location.origin}/play?code=${session.code}` : ""
+      typeof window !== "undefined" ? `${window.location.origin}/play/${session.code}` : ""
     )}`;
 
     return (

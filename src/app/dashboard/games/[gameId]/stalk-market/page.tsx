@@ -47,6 +47,7 @@ export default function StalkMarketEditPage({
   const [title, setTitle] = useState("");
   const [scoring, setScoring] = useState<SMScoringVersion>("pari_mutuel");
   const [mode, setMode] = useState<SMGameMode>("live");
+  const [seconds, setSeconds] = useState<number>(60);
   const [theme, setTheme] = useState<GameTheme>(DEFAULT_THEME.stalk_market);
 
   useEffect(() => {
@@ -73,6 +74,11 @@ export default function StalkMarketEditPage({
     setTitle(gameData.title || "");
     setScoring((gameData.sm_scoring_version || "pari_mutuel") as SMScoringVersion);
     setMode((gameData.sm_game_mode || "live") as SMGameMode);
+    setSeconds(
+      Number.isFinite(gameData.timer_seconds) && gameData.timer_seconds > 0
+        ? gameData.timer_seconds
+        : 60
+    );
     setTheme((gameData.theme as GameTheme) || DEFAULT_THEME.stalk_market);
 
     const { data: qs } = await supabase
@@ -100,6 +106,7 @@ export default function StalkMarketEditPage({
           title: title.trim() || "Untitled",
           sm_scoring_version: scoring,
           sm_game_mode: mode,
+          timer_seconds: Math.max(10, Math.min(300, Math.round(seconds))),
           theme,
           updated_at: new Date().toISOString(),
         })
@@ -113,7 +120,7 @@ export default function StalkMarketEditPage({
     }, 600);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, scoring, mode, theme]);
+  }, [title, scoring, mode, seconds, theme]);
 
   async function touchGame() {
     const supabase = createClient();
@@ -235,7 +242,7 @@ export default function StalkMarketEditPage({
           code,
           status: "lobby",
           current_question_index: -1,
-          timer_seconds: 60,
+          timer_seconds: Math.max(10, Math.min(300, Math.round(seconds))),
           speed_bonus: false,
           sm_phase: "lobby",
           sm_current_question_order: 0,
@@ -559,7 +566,49 @@ export default function StalkMarketEditPage({
               </div>
             </section>
 
-            {/* Row 4 — Spotlight pre-load link (only in preloaded mode) */}
+            {/* Row 4 — Seconds per question */}
+            <section className="card-rebrand p-6 lg:col-span-6">
+              <SettingsHeader
+                title="Seconds per Question"
+                description="How long bettors have to lock in their guesses after the host starts the timer."
+              />
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                {[30, 45, 60, 90, 120].map((s) => {
+                  const active = seconds === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSeconds(s)}
+                      className={`px-4 py-2 rounded-full border-2 text-[14px] font-semibold transition ${
+                        active
+                          ? "border-ink bg-[color-mix(in_srgb,var(--dune)_60%,var(--paper))] text-ink"
+                          : "border-dune bg-paper text-smoke hover:border-ink/40"
+                      }`}
+                    >
+                      {s}s
+                    </button>
+                  );
+                })}
+                <div className="flex items-center gap-2 ml-auto">
+                  <span className="text-[12px] text-smoke">Custom</span>
+                  <input
+                    type="number"
+                    min={10}
+                    max={300}
+                    value={seconds}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isNaN(v)) setSeconds(v);
+                    }}
+                    className="w-20 px-3 py-1.5 rounded-full border-2 border-dune bg-paper text-[14px] text-ink text-center focus:outline-none focus:border-ink"
+                  />
+                  <span className="text-[12px] text-smoke">sec</span>
+                </div>
+              </div>
+            </section>
+
+            {/* Row 5 — Spotlight pre-load link (only in preloaded mode) */}
             {mode === "preloaded" && (
               <section className="card-rebrand p-6 lg:col-span-6">
                 <SettingsHeader

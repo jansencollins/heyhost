@@ -228,6 +228,7 @@ export default function StalkMarketScreenPage({ sessionCode, devMode }: Props) {
             bets={bets.filter((b) => b.question_id === currentQuestion.id)}
             bettors={bettors}
             endsAt={session.sm_phase_end_timestamp}
+            totalSeconds={game.timer_seconds || 60}
             gameTitle={game.title}
             roundOrder={session.sm_current_question_order || 0}
             totalRounds={questions.length}
@@ -384,7 +385,7 @@ function LobbyScreen({
   const joinUrl =
     typeof window !== "undefined" ? `${window.location.host}/play` : "heyhostgames.com/play";
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-    typeof window !== "undefined" ? `${window.location.origin}/play?code=${code}` : ""
+    typeof window !== "undefined" ? `${window.location.origin}/play/${code}` : ""
   )}`;
   const allPlayers = spotlight ? [spotlight, ...players] : players;
 
@@ -697,13 +698,7 @@ function ScreenToolbar({
   right?: React.ReactNode;
 }) {
   return (
-    <div
-      className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 rounded-xl"
-      style={{
-        background: cardGradient(theme),
-        border: `1px solid ${theme.border}`,
-      }}
-    >
+    <div className="shrink-0 flex items-center justify-between gap-4 px-2 py-1">
       <div
         className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
         style={{
@@ -727,12 +722,103 @@ function ScreenToolbar({
   );
 }
 
+function CircularTimer({
+  remaining,
+  total,
+  started,
+  theme,
+}: {
+  remaining: number;
+  total: number;
+  started: boolean;
+  theme: GameTheme;
+}) {
+  const size = 96;
+  const stroke = 8;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = started ? Math.max(0, Math.min(1, remaining / total)) : 0;
+  const offset = circumference * (1 - progress);
+  const trackColor = `color-mix(in srgb, ${theme.textPrimary} 12%, transparent)`;
+  return (
+    <div
+      className="relative rounded-full"
+      style={{
+        width: size,
+        height: size,
+        background: cardGradient(theme),
+        border: `1px solid ${theme.border}`,
+        boxShadow: `0 4px 16px -4px ${theme.textPrimary}1f`,
+      }}
+    >
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="absolute inset-0"
+        aria-hidden="true"
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={trackColor}
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={theme.accent}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{ transition: "stroke-dashoffset 0.25s linear" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+        {started ? (
+          <>
+            <span
+              className="text-4xl font-bold tabular-nums"
+              style={{
+                color: theme.textPrimary,
+                fontFamily: getFontFamily(theme.headingFont),
+              }}
+            >
+              {remaining}
+            </span>
+            <span
+              className="text-[10px] font-semibold uppercase tracking-[0.18em] mt-1"
+              style={{ color: theme.textMuted }}
+            >
+              sec
+            </span>
+          </>
+        ) : (
+          <span
+            className="text-[11px] font-semibold uppercase tracking-[0.16em] text-center px-2"
+            style={{ color: theme.textMuted }}
+          >
+            Get<br />ready
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InvestingScreen({
   theme,
   question,
   bets,
   bettors,
   endsAt,
+  totalSeconds,
   gameTitle,
   roundOrder,
   totalRounds,
@@ -742,6 +828,7 @@ function InvestingScreen({
   bets: StalkMarketBet[];
   bettors: SessionPlayer[];
   endsAt: string | null;
+  totalSeconds: number;
   gameTitle: string;
   roundOrder: number;
   totalRounds: number;
@@ -757,74 +844,185 @@ function InvestingScreen({
   const submittedIds = new Set(bets.map((b) => b.player_id));
   const submittedCount = submittedIds.size;
   const onAccent = theme.buttonTextMode === "light" ? "#ffffff" : "#1a1a1a";
+  const timerStarted = !!endsAt;
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="relative w-full h-full flex flex-col">
       <ScreenToolbar
         theme={theme}
         gameTitle={gameTitle}
         roundOrder={roundOrder}
         totalRounds={totalRounds}
-        right={
-          <div
-            className="px-4 py-1 rounded-full text-2xl font-bold tabular-nums"
-            style={{ background: theme.accent, color: onAccent }}
-          >
-            {remaining}s
-          </div>
-        }
       />
 
-      {/* Body */}
-      <div className="flex-1 flex flex-col items-center justify-center text-center max-w-4xl w-full mx-auto mt-6 gap-6">
-        <div>
-          <p className="text-xl mb-3" style={{ color: theme.textMuted }}>
-            Place your bets
-          </p>
-          <h2
-            className="text-5xl font-bold leading-tight tracking-tight"
-            style={{
-              color: theme.textPrimary,
-              fontFamily: getFontFamily(theme.headingFont),
-            }}
-          >
-            {question.prompt}
-          </h2>
-        </div>
+      {/* Floating circular timer in the top-right */}
+      <div className="absolute top-0 right-0 z-10">
+        <CircularTimer
+          remaining={remaining}
+          total={totalSeconds}
+          started={timerStarted}
+          theme={theme}
+        />
+      </div>
 
-        <div
-          className="w-full rounded-xl px-5 py-4"
+      {/* Body */}
+      <div className="flex-1 min-h-0 flex flex-col items-center text-center w-full px-2 mt-4">
+        {/* Question — centered in the middle of the available vertical space */}
+        <h2
+          className="my-auto text-5xl font-bold leading-[1.1] tracking-tight max-w-5xl text-balance"
           style={{
-            background: cardGradient(theme),
-            border: `1px solid ${theme.border}`,
+            color: theme.textPrimary,
+            fontFamily: getFontFamily(theme.headingFont),
           }}
         >
-          <p className="text-base mb-3" style={{ color: theme.textMuted }}>
-            {submittedCount} of {bettors.length} submitted
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {bettors.map((p) => {
-              const submitted = submittedIds.has(p.id);
-              return (
-                <div
-                  key={p.id}
-                  className="px-3 py-1.5 rounded-full text-sm flex items-center gap-2"
-                  style={{
-                    background: submitted ? theme.accent : "transparent",
-                    border: `1px solid ${submitted ? theme.accent : theme.border}`,
-                    color: submitted ? onAccent : theme.textPrimary,
-                    opacity: submitted ? 1 : 0.6,
-                  }}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ background: p.avatar_color }}
-                  />
-                  <span className="font-medium">{p.display_name}</span>
-                  {submitted && <span>✓</span>}
+          {question.prompt}
+        </h2>
+
+        {/* Submission status — pinned to the bottom, full toolbar width.
+            Two-column split puts social pressure on the still-deciding side. */}
+        <div className="w-full">
+          {(() => {
+            const submittedPlayers = bettors.filter((p) =>
+              submittedIds.has(p.id)
+            );
+            const pendingPlayers = bettors.filter(
+              (p) => !submittedIds.has(p.id)
+            );
+            const allIn = pendingPlayers.length === 0;
+            const pct =
+              bettors.length === 0
+                ? 0
+                : Math.round((submittedCount / bettors.length) * 100);
+            return (
+              <div
+                className="rounded-xl p-5"
+                style={{
+                  background: cardGradient(theme),
+                  border: `1px solid ${theme.border}`,
+                }}
+              >
+                {/* Top bar: big count + progress */}
+                <div className="flex items-baseline justify-between mb-2">
+                  <p
+                    className="text-3xl font-bold tabular-nums"
+                    style={{
+                      color: allIn ? theme.accent : theme.textPrimary,
+                      fontFamily: getFontFamily(theme.headingFont),
+                    }}
+                  >
+                    {submittedCount}
+                    <span
+                      className="text-xl font-medium ml-1"
+                      style={{ color: theme.textMuted }}
+                    >
+                      / {bettors.length} locked in
+                    </span>
+                  </p>
+                  {!allIn && (
+                    <p
+                      className="text-sm font-semibold"
+                      style={{ color: theme.textMuted }}
+                    >
+                      Waiting on {pendingPlayers.length}
+                    </p>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+                <div
+                  className="h-1.5 rounded-full overflow-hidden mb-4"
+                  style={{ background: `${theme.textPrimary}14` }}
+                >
+                  <div
+                    className="h-full transition-all duration-500"
+                    style={{
+                      width: `${pct}%`,
+                      background: theme.accent,
+                    }}
+                  />
+                </div>
+
+                {/* Two-column split: ✓ submitted / still deciding */}
+                <div className="grid grid-cols-2 gap-6 text-left">
+                  {/* Submitted */}
+                  <div>
+                    <p
+                      className="text-[11px] uppercase tracking-[0.18em] font-bold mb-2"
+                      style={{ color: theme.accent }}
+                    >
+                      ✓ Locked in
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {submittedPlayers.length === 0 ? (
+                        <p
+                          className="text-xs italic"
+                          style={{ color: theme.textMuted }}
+                        >
+                          Nobody yet…
+                        </p>
+                      ) : (
+                        submittedPlayers.map((p) => (
+                          <div
+                            key={p.id}
+                            className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1.5"
+                            style={{
+                              background: theme.accent,
+                              color: onAccent,
+                              border: `1px solid ${theme.accent}`,
+                            }}
+                          >
+                            <span
+                              className="w-1.5 h-1.5 rounded-full"
+                              style={{ background: p.avatar_color }}
+                            />
+                            <span className="font-semibold">
+                              {p.display_name}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  {/* Pending */}
+                  <div>
+                    <p
+                      className="text-[11px] uppercase tracking-[0.18em] font-bold mb-2"
+                      style={{ color: theme.textMuted }}
+                    >
+                      Still deciding
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {pendingPlayers.length === 0 ? (
+                        <p
+                          className="text-xs italic"
+                          style={{ color: theme.textMuted }}
+                        >
+                          Everyone&apos;s in.
+                        </p>
+                      ) : (
+                        pendingPlayers.map((p) => (
+                          <div
+                            key={p.id}
+                            className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1.5"
+                            style={{
+                              background: "transparent",
+                              color: theme.textPrimary,
+                              border: `1px solid ${theme.border}`,
+                            }}
+                          >
+                            <span
+                              className="w-1.5 h-1.5 rounded-full"
+                              style={{ background: p.avatar_color }}
+                            />
+                            <span className="font-medium">
+                              {p.display_name}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -920,9 +1118,24 @@ function RevealScreen({
           {spotlightAnswer || "—"}
         </p>
 
-        {/* Correct / Wrong cards side by side (1/3 + 2/3) */}
-        <div className="flex-1 min-h-0 grid grid-cols-3 gap-4 overflow-hidden">
-          {/* Correct (1/3) */}
+        {/* Correct / Wrong cards side by side. Split adapts to counts so the
+            layout doesn't waste space when one side is sparse. */}
+        {(() => {
+          // 1:1 when wrong isn't dominating, otherwise lean 1:2 toward wrong.
+          const useEqualSplit =
+            correctBets.length > 0 &&
+            wrongBets.length <= correctBets.length * 2;
+          const outerCols = useEqualSplit ? "1fr 1fr" : "1fr 2fr";
+          // Cap row height only when very sparse so 1-3 items don't balloon;
+          // otherwise let rows fill (1fr) so 5-15 items look properly sized.
+          const correctRowMax = correctBets.length <= 3 ? "90px" : "1fr";
+          const wrongRowMax = wrongBets.length <= 4 ? "90px" : "1fr";
+          return (
+        <div
+          className="flex-1 min-h-0 grid gap-4 overflow-hidden"
+          style={{ gridTemplateColumns: outerCols }}
+        >
+          {/* Correct */}
           <div
             className="rounded-xl p-4 flex flex-col overflow-hidden"
             style={{
@@ -945,7 +1158,8 @@ function RevealScreen({
               <div
                 className="flex-1 min-h-0 overflow-y-auto grid gap-1.5"
                 style={{
-                  gridTemplateRows: `repeat(${correctBets.length}, minmax(40px, 1fr))`,
+                  gridAutoRows: `minmax(44px, ${correctRowMax})`,
+                  alignContent: correctRowMax === "1fr" ? "stretch" : "center",
                 }}
               >
                 {correctBets.map((b) => {
@@ -998,9 +1212,9 @@ function RevealScreen({
             )}
           </div>
 
-          {/* Wrong (2/3) */}
+          {/* Wrong */}
           <div
-            className="col-span-2 rounded-xl p-3 flex flex-col overflow-hidden"
+            className="rounded-xl p-3 flex flex-col overflow-hidden"
             style={{
               background: cardGradient(theme),
               border: `1px solid ${theme.border}`,
@@ -1019,9 +1233,13 @@ function RevealScreen({
               </p>
             ) : (
               <div
-                className="flex-1 min-h-0 overflow-y-auto grid grid-cols-3 gap-1.5"
+                className="flex-1 min-h-0 overflow-y-auto grid gap-1.5"
                 style={{
-                  gridTemplateRows: `repeat(${Math.ceil(wrongBets.length / 3)}, minmax(38px, 1fr))`,
+                  // Columns auto-fit to width — few items → fewer wider cells,
+                  // many items → more tighter cells.
+                  gridTemplateColumns: `repeat(auto-fit, minmax(${useEqualSplit ? 160 : 180}px, 1fr))`,
+                  gridAutoRows: `minmax(40px, ${wrongRowMax})`,
+                  alignContent: wrongRowMax === "1fr" ? "stretch" : "center",
                 }}
               >
                 {wrongBets.map((b) => {
@@ -1126,6 +1344,8 @@ function RevealScreen({
             )}
           </div>
         </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -1250,47 +1470,42 @@ function CrashScreen({
 
   return (
     <div className="relative w-full h-full flex flex-col overflow-hidden">
-      {/* Red downward chart as background */}
-      <CrashChartBg color={theme.danger} theme={theme} />
-
       {/* Toolbar matches the other phases, with a crash-alert badge in the right slot */}
-      <div className="relative z-10">
-        <ScreenToolbar
-          theme={theme}
-          gameTitle={gameTitle}
-          roundOrder={roundOrder}
-          totalRounds={totalRounds}
-          right={
-            <div
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
-              style={{
-                background: `color-mix(in srgb, ${theme.danger} 18%, transparent)`,
-                color: theme.danger,
-                border: `1px solid ${theme.danger}`,
-              }}
+      <ScreenToolbar
+        theme={theme}
+        gameTitle={gameTitle}
+        roundOrder={roundOrder}
+        totalRounds={totalRounds}
+        right={
+          <div
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
+            style={{
+              background: `color-mix(in srgb, ${theme.danger} 18%, transparent)`,
+              color: theme.danger,
+              border: `1px solid ${theme.danger}`,
+            }}
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
-              <svg
-                className="w-3.5 h-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              Crash Alert
-            </div>
-          }
-        />
-      </div>
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Crash Alert
+          </div>
+        }
+      />
 
-      {/* Foreground content */}
-      <div className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-center text-center px-8 py-6 gap-4">
+      {/* Heading sits on solid bg above the chart, so it stays legible */}
+      <div className="shrink-0 text-center px-8 pt-5 pb-4">
         <h1
           className="text-5xl font-bold tracking-tight leading-[1.05]"
           style={{
@@ -1300,13 +1515,18 @@ function CrashScreen({
         >
           Uh-oh, the market is crashing!
         </h1>
-
-        <p className="text-lg mt-1" style={{ color: theme.textPrimary }}>
+        <p className="text-lg mt-2" style={{ color: theme.textPrimary }}>
           <span style={{ color: theme.accent, fontWeight: 700 }}>{cashedCount}</span>{" "}
           of {bettors.length} cashed out
           {!past && " · the rest are still holding"}
         </p>
-        <div className="w-full max-w-4xl grid grid-cols-2 md:grid-cols-3 gap-2.5">
+      </div>
+
+      {/* Chart + player list area */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        <CrashChartBg color={theme.danger} theme={theme} />
+        <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-8 py-6">
+          <div className="w-full max-w-4xl grid grid-cols-2 md:grid-cols-3 gap-2.5">
           {bettors.map((p) => {
             const cashed = crashEvents.find((e) => e.player_id === p.id);
             const up = cashed && cashed.net_cents > 0;
@@ -1317,11 +1537,10 @@ function CrashScreen({
                 className="rounded-lg px-3 py-2 flex items-center justify-between gap-2 transition-opacity"
                 style={{
                   background: up
-                    ? `linear-gradient(180deg, ${theme.accent}22 0%, ${theme.accent}08 100%)`
-                    : `color-mix(in srgb, ${theme.bg} 75%, transparent)`,
+                    ? `linear-gradient(180deg, color-mix(in srgb, ${theme.accent} 22%, ${theme.bg}) 0%, color-mix(in srgb, ${theme.accent} 8%, ${theme.bg}) 100%)`
+                    : cardGradient(theme),
                   border: `1px solid ${cashed ? (up ? theme.accent : theme.border) : theme.border}`,
                   opacity: cashed ? 1 : 0.45,
-                  backdropFilter: "blur(6px)",
                 }}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -1359,6 +1578,7 @@ function CrashScreen({
               </div>
             );
           })}
+          </div>
         </div>
       </div>
     </div>
@@ -1369,17 +1589,12 @@ function LeaderboardRow({
   theme,
   rank,
   player,
-  direction = "neutral",
 }: {
   theme: GameTheme;
   rank: number;
   player: SessionPlayer;
-  /** Rank movement vs previous round: up = moved higher, down = dropped, neutral = same. */
-  direction?: "up" | "down" | "neutral";
 }) {
   const isPositive = player.score >= 0;
-  const arrow =
-    direction === "up" ? "▲" : direction === "down" ? "▼" : null;
   return (
     <div
       className="flex items-center gap-5 px-5 py-6 rounded-xl"
@@ -1407,41 +1622,16 @@ function LeaderboardRow({
         {player.display_name}
       </span>
       <span
-        className="font-bold tracking-tight tabular-nums text-2xl inline-flex items-baseline gap-1.5"
+        className="font-bold tracking-tight tabular-nums text-2xl"
         style={{
           color: isPositive ? theme.accent : theme.danger,
           fontFamily: getFontFamily(theme.headingFont),
         }}
       >
-        {arrow && (
-          <span
-            className="text-[0.6em]"
-            style={{
-              color: direction === "up" ? theme.accent : theme.danger,
-            }}
-          >
-            {arrow}
-          </span>
-        )}
         {formatDollarsScreen(player.score)}
       </span>
     </div>
   );
-}
-
-function rankDirection(
-  player: SessionPlayer,
-  currentRank: number,
-  previousPlayers?: SessionPlayer[]
-): "up" | "down" | "neutral" {
-  if (!previousPlayers || previousPlayers.length === 0) return "neutral";
-  const prevSorted = [...previousPlayers].sort((a, b) => b.score - a.score);
-  const prevIndex = prevSorted.findIndex((p) => p.id === player.id);
-  if (prevIndex < 0) return "neutral";
-  const prevRank = prevIndex + 1;
-  if (prevRank > currentRank) return "up";
-  if (prevRank < currentRank) return "down";
-  return "neutral";
 }
 
 function LeaderboardScreen({
@@ -1450,15 +1640,12 @@ function LeaderboardScreen({
   gameTitle,
   roundOrder,
   totalRounds,
-  previousPlayers,
 }: {
   theme: GameTheme;
   players: SessionPlayer[];
   gameTitle?: string;
   roundOrder?: number;
   totalRounds?: number;
-  /** Snapshot of players' scores before this round, used to compute rank movement. */
-  previousPlayers?: SessionPlayer[];
 }) {
   const sorted = [...players].sort((a, b) => b.score - a.score).slice(0, 12);
   const useTwoCols = sorted.length > 8;
@@ -1505,7 +1692,6 @@ function LeaderboardScreen({
               theme={theme}
               rank={i + 1}
               player={p}
-              direction={rankDirection(p, i + 1, previousPlayers)}
             />
           ))}
         </div>
@@ -1536,33 +1722,23 @@ function FinishedScreen({
   const rest = sorted.slice(3, 12);
   const useTwoCols = rest.length > 6;
   return (
-    <div className="flex-1 min-h-0 flex flex-col items-center px-12 py-8 gap-6 overflow-hidden w-full">
-      <h1
-        className="text-7xl font-bold tracking-[-0.025em] shrink-0"
-        style={{
-          color: theme.textPrimary,
-          fontFamily: getFontFamily(theme.headingFont),
-        }}
-      >
-        Final Results
-      </h1>
-
+    <div className="relative flex-1 min-h-0 flex flex-col items-center px-10 py-4 gap-3 overflow-hidden w-full">
       {spotlight && (
         <div
-          className="shrink-0 inline-flex items-center gap-3 px-5 py-2 rounded-full -mt-2"
+          className="absolute top-3 right-3 z-10 inline-flex items-center gap-2 px-3 py-1 rounded-full"
           style={{
             background: cardGradient(theme),
             border: `1px solid ${theme.border}`,
           }}
         >
-          <span className="text-sm" style={{ color: theme.textMuted }}>
+          <span className="text-[11px]" style={{ color: theme.textMuted }}>
             Knowability of{" "}
             <span style={{ color: theme.textPrimary, fontWeight: 600 }}>
               {spotlight.display_name}
             </span>
           </span>
           <span
-            className="text-2xl font-bold tabular-nums"
+            className="text-lg font-bold tabular-nums"
             style={{
               color: theme.accent,
               fontFamily: getFontFamily(theme.headingFont),
@@ -1573,7 +1749,17 @@ function FinishedScreen({
         </div>
       )}
 
-      <div className="flex items-end gap-8 shrink-0">
+      <h1
+        className="text-4xl font-bold tracking-[-0.025em] shrink-0"
+        style={{
+          color: theme.textPrimary,
+          fontFamily: getFontFamily(theme.headingFont),
+        }}
+      >
+        Final Results
+      </h1>
+
+      <div className="flex items-end gap-5 shrink-0">
         {podium[1] && (
           <PodiumBlock player={podium[1]} place={2} theme={theme} />
         )}
@@ -1627,38 +1813,37 @@ function FinishedRow({
   const isPositive = player.score >= 0;
   return (
     <div
-      className="flex items-center gap-5 px-6 py-3 rounded-xl"
+      className="flex items-center gap-2.5 px-3 py-1 rounded-lg min-h-0"
       style={{
         background: cardGradient(theme),
         border: `1px solid ${theme.border}`,
       }}
     >
       <span
-        className="font-bold w-12 text-2xl tabular-nums"
+        className="font-bold w-7 text-sm tabular-nums shrink-0"
         style={{ color: theme.textMuted }}
       >
         #{rank}
       </span>
       <span
-        className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg shrink-0"
+        className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0"
         style={{ background: player.avatar_color, color: "#ffffff" }}
       >
         {(player.display_name || "?").charAt(0).toUpperCase()}
       </span>
       <span
-        className="flex-1 font-semibold text-2xl truncate"
+        className="flex-1 font-semibold text-sm truncate"
         style={{ color: theme.textPrimary }}
       >
         {player.display_name}
       </span>
       <span
-        className="text-3xl font-bold tracking-[-0.02em] tabular-nums inline-flex items-baseline gap-1.5"
+        className="text-base font-bold tracking-[-0.02em] tabular-nums"
         style={{
           color: isPositive ? theme.accent : theme.danger,
           fontFamily: getFontFamily(theme.headingFont),
         }}
       >
-        <span className="text-[0.55em]">{isPositive ? "▲" : "▼"}</span>
         {formatDollarsScreen(player.score)}
       </span>
     </div>
@@ -1680,30 +1865,30 @@ function PodiumBlock({
     3: "#fb923c",
   };
   const blockClass: Record<1 | 2 | 3, string> = {
-    1: "w-40 h-36 text-6xl",
-    2: "w-32 h-24 text-5xl",
-    3: "w-32 h-16 text-5xl",
+    1: "w-24 h-16 text-3xl",
+    2: "w-20 h-12 text-2xl",
+    3: "w-20 h-8 text-2xl",
   };
   const avatarSize: Record<1 | 2 | 3, string> = {
-    1: "w-32 h-32 text-5xl",
-    2: "w-24 h-24 text-4xl",
-    3: "w-24 h-24 text-4xl",
+    1: "w-16 h-16 text-2xl",
+    2: "w-14 h-14 text-xl",
+    3: "w-14 h-14 text-xl",
   };
   const nameSize: Record<1 | 2 | 3, string> = {
-    1: "text-4xl",
-    2: "text-3xl",
-    3: "text-3xl",
+    1: "text-xl",
+    2: "text-base",
+    3: "text-base",
   };
   const scoreSize: Record<1 | 2 | 3, string> = {
-    1: "text-4xl",
-    2: "text-3xl",
-    3: "text-3xl",
+    1: "text-xl",
+    2: "text-base",
+    3: "text-base",
   };
   const isPositive = player.score >= 0;
   return (
     <div className="flex flex-col items-center">
       {place === 1 && (
-        <span className="text-4xl mb-1" style={{ color: "#fbbf24" }}>
+        <span className="text-xl leading-none" style={{ color: "#fbbf24" }}>
           👑
         </span>
       )}
@@ -1714,23 +1899,22 @@ function PodiumBlock({
         {(player.display_name || "?").charAt(0).toUpperCase()}
       </span>
       <p
-        className={`${nameSize[place]} font-bold mt-2 text-center`}
+        className={`${nameSize[place]} font-bold mt-1 text-center leading-tight`}
         style={{ color: theme.textPrimary }}
       >
         {player.display_name}
       </p>
       <p
-        className={`${scoreSize[place]} font-bold tabular-nums inline-flex items-baseline gap-1.5`}
+        className={`${scoreSize[place]} font-bold tabular-nums`}
         style={{
           color: isPositive ? theme.accent : theme.danger,
           fontFamily: getFontFamily(theme.headingFont),
         }}
       >
-        <span className="text-[0.55em]">{isPositive ? "▲" : "▼"}</span>
         {formatDollarsScreen(player.score)}
       </p>
       <div
-        className={`${blockClass[place]} rounded-t-2xl mt-2 flex items-center justify-center font-bold`}
+        className={`${blockClass[place]} rounded-t-xl mt-1.5 flex items-center justify-center font-bold`}
         style={{
           background: blockColors[place],
           color: `color-mix(in srgb, ${blockColors[place]} 30%, black)`,

@@ -11,11 +11,7 @@ import {
   RemoteButton,
   RemotePlayerRow,
 } from "@/components/games/host/RemoteUI";
-import {
-  formatCents,
-  normalizeGuess,
-  CRASH_DURATION_MS,
-} from "@/lib/sm-scoring";
+import { formatCents, normalizeGuess } from "@/lib/sm-scoring";
 import type {
   Game,
   Session,
@@ -284,6 +280,7 @@ export default function StalkMarketHostRemote({ sessionId, devMode }: Props) {
             });
             setJudging(null);
           }}
+          onStartTimer={() => api("start_investing_timer")}
           onAdjudicate={() => api("open_adjudication")}
           busy={busy}
         />
@@ -482,6 +479,7 @@ function InvestingControls(props: {
   spotlightAnswer: string;
   judging: string | null;
   onMark: (guess_text: string, is_correct: boolean) => void;
+  onStartTimer: () => void;
   onAdjudicate: () => void;
   busy: boolean;
 }) {
@@ -492,6 +490,7 @@ function InvestingControls(props: {
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
+  const timerStarted = !!props.endsAt;
   const remainingMs = props.endsAt
     ? Math.max(0, new Date(props.endsAt).getTime() - now)
     : 0;
@@ -523,8 +522,11 @@ function InvestingControls(props: {
               </p>
             )}
           </div>
-          <span className="text-2xl font-bold tabular-nums text-zinc-100 shrink-0">
-            {remainingS}s
+          <span
+            className="text-2xl font-bold tabular-nums shrink-0"
+            style={{ color: timerStarted ? "#f4f4f5" : "#52525b" }}
+          >
+            {timerStarted ? `${remainingS}s` : "—"}
           </span>
         </div>
         <div
@@ -537,20 +539,33 @@ function InvestingControls(props: {
           />
         </div>
       </section>
-      <GuessClusters
-        clusters={clusters}
-        players={props.players}
-        judging={props.judging}
-        onMark={props.onMark}
-      />
-      <RemoteButton
-        onClick={props.onAdjudicate}
-        disabled={props.busy}
-        size="md"
-        className="w-full mt-2 whitespace-nowrap"
-      >
-        Close Investing & Grade
-      </RemoteButton>
+      {!timerStarted ? (
+        <RemoteButton
+          onClick={props.onStartTimer}
+          disabled={props.busy}
+          size="lg"
+          className="w-full"
+        >
+          Start Timer
+        </RemoteButton>
+      ) : (
+        <>
+          <GuessClusters
+            clusters={clusters}
+            players={props.players}
+            judging={props.judging}
+            onMark={props.onMark}
+          />
+          <RemoteButton
+            onClick={props.onAdjudicate}
+            disabled={props.busy}
+            size="md"
+            className="w-full mt-2 whitespace-nowrap"
+          >
+            Close Investing & Grade
+          </RemoteButton>
+        </>
+      )}
     </>
   );
 }
@@ -777,15 +792,14 @@ function RevealControls(props: {
     cur.payout += b.payout_cents;
     byPlayer.set(b.player_id, cur);
   }
-  // Every bettor stakes $100 per round even if they only placed one bet.
-  // The bet table doesn't capture "didn't bet" players; assume they're absent
-  // here since the unique constraint is on full bets.
+  // The per-round $100 is a fresh allowance, not the player's own money —
+  // round net is the gross payout (never negative).
   const rows = Array.from(byPlayer.entries())
     .map(([player_id, v]) => ({
       player_id,
       name:
         props.players.find((p) => p.id === player_id)?.display_name || "?",
-      net: v.payout - 10000, // round stake is always 100 dollars
+      net: v.payout,
     }))
     .sort((a, b) => b.net - a.net);
   return (
@@ -834,17 +848,8 @@ function CrashControls(props: {
   onResolve: () => void;
   busy: boolean;
 }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 100);
-    return () => clearInterval(t);
-  }, []);
-  const startMs = props.crashStartedAt
-    ? new Date(props.crashStartedAt).getTime()
-    : now;
-  const elapsed = Math.max(0, now - startMs);
-  const totalMs = CRASH_DURATION_MS + 1500;
-  const past = elapsed >= totalMs;
+  const cashedCount = props.crashEvents.length;
+  const total = props.bettors.length;
   return (
     <>
       <section
@@ -855,30 +860,23 @@ function CrashControls(props: {
           boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.6)",
         }}
       >
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] uppercase tracking-[0.25em] text-red-400 font-bold">
-            📉 Market Crash
-          </p>
-          <span className="text-2xl font-bold tabular-nums text-red-100">
-            {(elapsed / 1000).toFixed(2)}s
-          </span>
-        </div>
-        <p className="text-sm text-red-200">
-          Players are tapping CASH OUT. They can&apos;t see each other.
+        <p className="text-[10px] uppercase tracking-[0.25em] text-red-400 font-bold mb-2">
+          📉 Market Crash
         </p>
-        <p className="text-xs text-red-300/80 mt-1">
-          {props.crashEvents.length} of {props.bettors.length} bettors cashed out
+        <p className="text-sm text-red-200">
+          Each player runs their own 10-second timer and taps CASH OUT before time&apos;s up.
+        </p>
+        <p className="text-xs text-red-300/80 mt-2 font-semibold tabular-nums">
+          {cashedCount} of {total} bettors cashed out
         </p>
       </section>
       <RemoteButton
         onClick={props.onResolve}
-        disabled={props.busy || !past}
+        disabled={props.busy}
         size="lg"
         className="w-full"
       >
-        {past
-          ? "Resolve Crash & Show Standings"
-          : `Wait ${Math.ceil((totalMs - elapsed) / 1000)}s…`}
+        Resolve Crash & Show Standings
       </RemoteButton>
     </>
   );

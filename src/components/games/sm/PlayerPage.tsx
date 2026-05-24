@@ -165,6 +165,27 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
   const [avatarColor, setAvatarColor] = useState(DEFAULT_PALETTE[0]);
   const [joining, setJoining] = useState(false);
 
+  // Width of the joining body so the color grid responds to the frame (dev
+  // preview) and not the browser viewport — matches SOTD's join layout.
+  const [joiningWidth, setJoiningWidth] = useState(0);
+  const joiningRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const measure = () => setJoiningWidth(node.getBoundingClientRect().width);
+    measure();
+    requestAnimationFrame(measure);
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) setJoiningWidth(e.contentRect.width);
+    });
+    ro.observe(node);
+  }, []);
+  const cardCols =
+    joiningWidth >= 896
+      ? "grid-cols-6"
+      : joiningWidth >= 448
+        ? "grid-cols-4"
+        : "grid-cols-3";
+  const inputPadY = joiningWidth >= 448 ? "py-3" : "py-1.5";
+
   const refresh = useCallback(
     async (sessionId?: string) => {
       const supabase = createClient();
@@ -360,8 +381,11 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
     const shadowColor = isDark ? "#FFFFFF" : theme.textPrimary;
     return (
       <Shell theme={theme} paused={!!session?.is_paused}>
-        <div className="w-full max-w-md mx-auto flex flex-col px-8 pt-7 pb-8 min-h-screen">
-          {/* Top: Game Code badge + branded title card */}
+        <div
+          ref={joiningRef}
+          className="flex-1 flex flex-col px-8 pt-7 pb-8 min-h-0"
+        >
+          {/* Top: Game Code badge + title card */}
           <div className="shrink-0 flex flex-col gap-2">
             <div className="flex w-full items-center justify-center gap-2">
               <svg
@@ -398,59 +422,47 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
                   background: `linear-gradient(135deg, ${theme.accent} 0%, color-mix(in srgb, ${theme.accent} 70%, ${theme.textPrimary}) 100%)`,
                 }}
               >
-                <p
-                  className="text-[10px] uppercase tracking-[0.3em] font-mono mb-1.5 flex items-center gap-1.5"
-                  style={{
-                    color: titleFill,
-                    opacity: 0.7,
-                  }}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full inline-block animate-pulse"
-                    style={{ background: titleFill }}
-                  />
-                  Live · Stalk Market
-                </p>
                 <h1
-                  className="font-mono font-bold text-[28px] tracking-tight leading-[1.05] tabular-nums"
+                  className="font-bold text-[26px] tracking-[-0.03em] leading-[1.05]"
                   style={{
                     color: titleFill,
                     textShadow: `0 2px 10px ${shadowColor}33`,
+                    fontFamily: getFontFamily(theme.headingFont),
                   }}
                 >
-                  ${(game?.title || "GUEST").toUpperCase()}
-                  <span className="ml-1">▲</span>
+                  Stalk Market
                 </h1>
-                <p
-                  className="text-[11px] font-mono mt-1.5 tabular-nums"
-                  style={{
-                    color: titleFill,
-                    textShadow: `0 1px 4px ${shadowColor}66`,
-                    opacity: 0.85,
-                  }}
-                >
-                  +0.00% · OPENING BELL
-                </p>
+                {game?.title && (
+                  <p
+                    className="text-[13px] font-semibold mt-2 leading-snug"
+                    style={{
+                      color: titleFill,
+                      textShadow: `0 1px 4px ${shadowColor}66`,
+                    }}
+                  >
+                    {game.title} Edition
+                  </p>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Body: name + color picker */}
+          {/* Body: name + color picker, vertically centered */}
           <div className="flex-1 flex flex-col justify-center gap-7 min-h-0 py-4">
             <div className="w-full max-w-md mx-auto">
               <label
-                className="block text-[10px] font-mono font-bold mb-1.5 uppercase tracking-[0.2em] text-center"
+                className="block text-[10px] font-medium mb-1.5 uppercase tracking-wider text-center"
                 style={{ color: theme.textMuted }}
               >
-                <span style={{ color: theme.accent }}>$</span> Your Trader Name
+                Player Name
               </label>
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Enter your name"
-                maxLength={24}
+                maxLength={20}
                 autoFocus
-                className="w-full text-sm font-bold text-center focus:outline-none px-3 py-3"
+                className={`w-full text-sm font-bold text-center focus:outline-none px-3 ${inputPadY}`}
                 style={{
                   ...getCardCss(theme),
                   color: theme.textPrimary,
@@ -461,12 +473,12 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
 
             <div className="flex flex-col">
               <p
-                className="block text-[10px] font-mono font-bold mb-1.5 uppercase tracking-[0.2em] text-center"
+                className="block text-[10px] font-medium mb-1.5 uppercase tracking-wider text-center"
                 style={{ color: theme.textMuted }}
               >
-                <span style={{ color: theme.accent }}>▲</span> Pick Your Position
+                Pick a Color
               </p>
-              <div className="grid grid-cols-4 gap-2.5 w-[70%] mx-auto">
+              <div className={`grid ${cardCols} gap-2.5 w-[70%] mx-auto`}>
                 {palette.map((color) => {
                   const selected = avatarColor === color;
                   return (
@@ -527,18 +539,16 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
             )}
           </div>
 
-          {/* Bottom: Join button */}
+          {/* Bottom: Join button anchored — uses the theme accent */}
           <div className="shrink-0 w-full max-w-md mx-auto">
-            <Button
-              variant="cta"
+            <MarketButton
+              theme={theme}
+              variant="primary"
               onClick={handleJoin}
-              loading={joining}
-              disabled={!displayName.trim()}
-              className="w-full"
-              size="lg"
+              disabled={joining || !displayName.trim()}
             >
-              Join Game
-            </Button>
+              {joining ? "Joining…" : "Join Game"}
+            </MarketButton>
           </div>
         </div>
       </Shell>
@@ -564,12 +574,22 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
       b.question_id === session.sm_current_question_id
   );
 
+  // Hide the profile header during the active betting screen so the question
+  // and stepper can breathe.
+  const inActiveInvesting =
+    session.sm_phase === "investing" &&
+    !!currentQuestion &&
+    !isSpotlight &&
+    myBets.length === 0;
+
   return (
     <Shell theme={theme} paused={!!session?.is_paused}>
       <div className="w-full max-w-md mx-auto px-4 py-4 h-full flex flex-col gap-3 overflow-hidden">
-        <PlayerHeader player={player} score={player.score} isSpotlight={isSpotlight} theme={theme} />
+        {!inActiveInvesting && (
+          <PlayerHeader player={player} score={player.score} isSpotlight={isSpotlight} theme={theme} />
+        )}
 
-        {session.sm_phase === "lobby" && (
+        {session.status !== "finished" && session.sm_phase === "lobby" && (
           <LobbyView
             theme={theme}
             isSpotlight={isSpotlight}
@@ -578,18 +598,23 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
           />
         )}
 
-        {session.sm_phase === "spotlight_answer" && currentQuestion && (
-          <SpotlightAnswerView
-            theme={theme}
-            isSpotlight={isSpotlight}
-            session={session}
-            question={currentQuestion}
-            sessionId={session.id}
-          />
-        )}
+        {session.status !== "finished" &&
+          session.sm_phase === "spotlight_answer" &&
+          currentQuestion && (
+            <SpotlightAnswerView
+              theme={theme}
+              isSpotlight={isSpotlight}
+              session={session}
+              question={currentQuestion}
+              sessionId={session.id}
+            />
+          )}
 
-        {session.sm_phase === "investing" && currentQuestion && !isSpotlight && (
-          myBets.length > 0 ? (
+        {session.status !== "finished" &&
+          session.sm_phase === "investing" &&
+          currentQuestion &&
+          !isSpotlight &&
+          (myBets.length > 0 ? (
             <WaitingView
               theme={theme}
               me={player}
@@ -607,64 +632,73 @@ export default function StalkMarketPlayerPage({ sessionCode, devMode }: Props) {
               playerId={player.id}
               existingBets={myBets}
             />
-          )
-        )}
+          ))}
 
-        {session.sm_phase === "investing" && isSpotlight && currentQuestion && (
-          <SpectatorView
-            theme={theme}
-            text={`The room is investing in guesses about you. Your answer: "${
-              session.sm_current_spotlight_answer || ""
-            }"`}
-          />
-        )}
+        {session.status !== "finished" &&
+          session.sm_phase === "investing" &&
+          isSpotlight &&
+          currentQuestion && (
+            <SpectatorView
+              theme={theme}
+              text={`The room is investing in guesses about you. Your answer: "${
+                session.sm_current_spotlight_answer || ""
+              }"`}
+            />
+          )}
 
-        {session.sm_phase === "adjudication" && (
+        {session.status !== "finished" && session.sm_phase === "adjudication" && (
           <SpectatorView theme={theme} text="The host is grading guesses…" />
         )}
 
-        {session.sm_phase === "reveal" && currentQuestion && (
-          <RevealView
-            theme={theme}
-            session={session}
-            myBets={myBets}
-            allBets={bets}
-            players={allPlayers}
-            currentQuestionId={currentQuestion.id}
-            meId={player.id}
-            spotlightId={session.sm_spotlight_player_id}
-          />
-        )}
+        {session.status !== "finished" &&
+          session.sm_phase === "reveal" &&
+          currentQuestion && (
+            <RevealView
+              theme={theme}
+              session={session}
+              myBets={myBets}
+              allBets={bets}
+              players={allPlayers}
+              currentQuestionId={currentQuestion.id}
+              meId={player.id}
+              spotlightId={session.sm_spotlight_player_id}
+            />
+          )}
 
-        {session.sm_phase === "crash" && currentQuestion && !isSpotlight && (
-          <CrashView
-            theme={theme}
-            session={session}
-            playerId={player.id}
-            questionId={currentQuestion.id}
-            existingEvent={
-              crashEvents.find(
-                (e) =>
-                  e.player_id === player.id &&
-                  e.question_id === currentQuestion.id
-              ) || null
-            }
-            allCrashEvents={crashEvents.filter(
-              (e) => e.question_id === currentQuestion.id
-            )}
-            players={allPlayers}
-            devMode={!!devMode}
-          />
-        )}
-        {session.sm_phase === "crash" && isSpotlight && (
-          <SpectatorView
-            theme={theme}
-            text="The market crashed. Watch your bettors panic."
-          />
-        )}
+        {session.status !== "finished" &&
+          session.sm_phase === "crash" &&
+          currentQuestion &&
+          !isSpotlight && (
+            <CrashView
+              theme={theme}
+              session={session}
+              playerId={player.id}
+              questionId={currentQuestion.id}
+              existingEvent={
+                crashEvents.find(
+                  (e) =>
+                    e.player_id === player.id &&
+                    e.question_id === currentQuestion.id
+                ) || null
+              }
+              allCrashEvents={crashEvents.filter(
+                (e) => e.question_id === currentQuestion.id
+              )}
+              players={allPlayers}
+              devMode={!!devMode}
+            />
+          )}
+        {session.status !== "finished" &&
+          session.sm_phase === "crash" &&
+          isSpotlight && (
+            <SpectatorView
+              theme={theme}
+              text="The market crashed. Watch your bettors panic."
+            />
+          )}
 
-        {session.sm_phase === "leaderboard" &&
-          session.status !== "finished" && (
+        {session.status !== "finished" &&
+          session.sm_phase === "leaderboard" && (
             <LeaderboardView
               theme={theme}
               players={allPlayers.filter((p) => !p.is_removed)}
@@ -779,14 +813,9 @@ function PlayerHeader({
           Total
         </p>
         <p
-          className="font-bold text-base tabular-nums leading-tight inline-flex items-baseline gap-1"
+          className="font-bold text-base tabular-nums leading-tight"
           style={{ color: scoreColor }}
         >
-          {direction !== "neutral" && (
-            <span className="text-[0.7em]">
-              {direction === "up" ? "▲" : "▼"}
-            </span>
-          )}
           {formatCents(score)}
         </p>
       </div>
@@ -808,6 +837,7 @@ function LobbyView({
   const active = players.filter((p) => !p.is_removed);
   const spotlight = active.find((p) => p.id === spotlightId) || null;
   const bettors = active.filter((p) => p.id !== spotlightId);
+  const [tab, setTab] = useState<"players" | "rules">("rules");
 
   const steps: { title: string; body: string }[] = isSpotlight
     ? [
@@ -823,75 +853,147 @@ function LobbyView({
         { title: "Highest total wins", body: "Whoever has the most cash after all rounds takes the night." },
       ];
 
-  return (
-    <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
-      <TickerCard theme={theme}>
-        <p
-          className="text-sm font-semibold text-center mb-3"
-          style={{ color: theme.textPrimary }}
-        >
-          Waiting for host to start the game
-        </p>
-        {active.length === 0 ? (
-          <p
-            className="text-xs italic py-2"
-            style={{ color: theme.textMuted }}
-          >
-            Waiting for players to join…
-          </p>
-        ) : (
-          <div className="space-y-1.5">
-            {spotlight && (
-              <PlayerListRow
-                theme={theme}
-                player={spotlight}
-                badge="★ Spotlight"
-                badgeColor="#f59e0b"
-                highlight
-              />
-            )}
-            {bettors.length > 0 && (
-              <div className="grid grid-cols-2 gap-x-1.5 gap-y-1.5">
-                {bettors.map((p) => (
-                  <PlayerListRow key={p.id} theme={theme} player={p} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </TickerCard>
+  function TabButton({
+    value,
+    label,
+  }: {
+    value: "players" | "rules";
+    label: string;
+  }) {
+    const active = tab === value;
+    return (
+      <button
+        type="button"
+        onClick={() => setTab(value)}
+        className="flex-1 py-2 rounded-full text-xs font-semibold transition"
+        style={{
+          background: active ? theme.accent : "transparent",
+          color: active
+            ? theme.buttonTextMode === "light"
+              ? "#ffffff"
+              : "#1a1a1a"
+            : theme.textMuted,
+          border: `1px solid ${active ? theme.accent : theme.border}`,
+        }}
+      >
+        {label}
+      </button>
+    );
+  }
 
-      <TickerCard theme={theme} title="How to play" tall>
-        <ol className="space-y-3">
-          {steps.map((s, i) => (
-            <li key={i} className="flex gap-3">
-              <span
-                className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold tabular-nums"
-                style={{
-                  background: theme.accent,
-                  color: theme.buttonTextMode === "light" ? "#ffffff" : "#1a1a1a",
-                }}
-              >
-                {i + 1}
-              </span>
-              <div className="min-w-0">
-                <p
-                  className="text-sm font-semibold leading-tight"
-                  style={{ color: theme.textPrimary }}
+  return (
+    <div className="flex flex-col gap-3 flex-1 min-h-0">
+      <p
+        className="text-xs text-center shrink-0 py-3"
+        style={{ color: theme.textMuted }}
+      >
+        Waiting for host to start the game
+        <span aria-hidden className="inline-block tabular-nums ml-0.5">
+          <span style={{ animation: "sm-lobby-dot 1.4s infinite", animationDelay: "0ms" }}>.</span>
+          <span style={{ animation: "sm-lobby-dot 1.4s infinite", animationDelay: "200ms" }}>.</span>
+          <span style={{ animation: "sm-lobby-dot 1.4s infinite", animationDelay: "400ms" }}>.</span>
+        </span>
+        <style>{`
+          @keyframes sm-lobby-dot {
+            0%, 80%, 100% { opacity: 0.2; }
+            40% { opacity: 1; }
+          }
+        `}</style>
+      </p>
+
+      <div className="flex gap-2 shrink-0">
+        <TabButton value="rules" label="How to play" />
+        <TabButton value="players" label={`Players · ${active.length}`} />
+      </div>
+
+      {tab === "players" ? (
+        <section
+          className="rounded-lg p-3 flex-1 min-h-0 flex flex-col"
+          style={{
+            background: (() => {
+              const overlay = theme.mode === "dark" ? "rgb(255,255,255)" : "rgb(0,0,0)";
+              const top = `color-mix(in srgb, ${theme.bg} 92%, ${overlay})`;
+              const bottom = `color-mix(in srgb, ${theme.bg} 86%, ${overlay})`;
+              return `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
+            })(),
+            border: `1px solid ${theme.border}`,
+          }}
+        >
+          {active.length === 0 ? (
+            <p
+              className="text-xs italic py-2 text-center"
+              style={{ color: theme.textMuted }}
+            >
+              Waiting for players to join…
+            </p>
+          ) : (
+            <>
+              {spotlight && (
+                <div className="shrink-0">
+                  <PlayerListRow
+                    theme={theme}
+                    player={spotlight}
+                    badge="★ Spotlight"
+                    badgeColor="#f59e0b"
+                    highlight
+                  />
+                </div>
+              )}
+              {bettors.length > 0 && (
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
+                  {bettors.map((p) => (
+                    <PlayerListRow key={p.id} theme={theme} player={p} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      ) : (
+        <section
+          className="rounded-lg px-4 pt-8 pb-6 flex-1 min-h-0 overflow-y-auto"
+          style={{
+            background: (() => {
+              const overlay = theme.mode === "dark" ? "rgb(255,255,255)" : "rgb(0,0,0)";
+              const top = `color-mix(in srgb, ${theme.bg} 92%, ${overlay})`;
+              const bottom = `color-mix(in srgb, ${theme.bg} 86%, ${overlay})`;
+              return `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
+            })(),
+            border: `1px solid ${theme.border}`,
+          }}
+        >
+          <ol className="space-y-5">
+            {steps.map((s, i) => (
+              <li key={i} className="flex gap-3">
+                <span
+                  className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold tabular-nums"
+                  style={{
+                    background: theme.accent,
+                    color:
+                      theme.buttonTextMode === "light" ? "#ffffff" : "#1a1a1a",
+                  }}
                 >
-                  {s.title}
-                </p>
-                <p
-                  className="text-xs mt-0.5 leading-relaxed"
-                  style={{ color: theme.textMuted }}
-                >
-                  {s.body}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </TickerCard>
+                  {i + 1}
+                </span>
+                <div className="min-w-0">
+                  <p
+                    className="text-sm font-semibold leading-tight"
+                    style={{ color: theme.textPrimary }}
+                  >
+                    {s.title}
+                  </p>
+                  <p
+                    className="text-xs mt-1 leading-relaxed"
+                    style={{ color: theme.textMuted }}
+                  >
+                    {s.body}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
     </div>
   );
 }
@@ -921,13 +1023,13 @@ function PlayerListRow({
       }
     >
       <span
-        className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
+        className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
         style={{ background: player.avatar_color, color: "#ffffff" }}
       >
         {(player.display_name || "?").charAt(0).toUpperCase()}
       </span>
       <span
-        className="text-xs font-semibold truncate flex-1 min-w-0"
+        className="text-base font-semibold truncate flex-1 min-w-0"
         style={{ color: theme.textPrimary }}
       >
         {player.display_name}
@@ -1074,11 +1176,13 @@ function InvestingView({
   playerId: string;
   existingBets: StalkMarketBet[];
 }) {
-  // Local guesses (text + chips); sync from existingBets if user already submitted
+  // Local guesses (text + chips); sync from existingBets if user already submitted.
+  // Fresh round: pre-load all chips onto the first guess so single-answer bettors
+  // don't have to tap "+" ten times.
   const [guesses, setGuesses] = useState<{ text: string; chips: number }[]>(
     existingBets.length > 0
       ? existingBets.map((b) => ({ text: b.guess_text, chips: b.chips }))
-      : [{ text: "", chips: 0 }]
+      : [{ text: "", chips: CHIPS_PER_ROUND }]
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -1092,6 +1196,7 @@ function InvestingView({
     const t = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(t);
   }, []);
+  const timerStarted = !!session.sm_phase_end_timestamp;
   const remainingS = session.sm_phase_end_timestamp
     ? Math.max(
         0,
@@ -1120,10 +1225,41 @@ function InvestingView({
   }
   function addGuess() {
     if (guesses.length >= MAX_GUESSES_PER_ROUND) return;
-    setGuesses([...guesses, { text: "", chips: 0 }]);
+    setGuesses((gs) => {
+      // Donate 1 chip to the new guess from whichever existing guess has the most.
+      // Keeps the running total at CHIPS_PER_ROUND so the player doesn't have to
+      // re-balance after splitting their bet.
+      let donorIdx = -1;
+      let donorChips = 0;
+      for (let i = 0; i < gs.length; i++) {
+        if (gs[i].chips > donorChips) {
+          donorIdx = i;
+          donorChips = gs[i].chips;
+        }
+      }
+      if (donorIdx === -1) {
+        return [...gs, { text: "", chips: 0 }];
+      }
+      return [
+        ...gs.map((g, i) =>
+          i === donorIdx ? { ...g, chips: g.chips - 1 } : g
+        ),
+        { text: "", chips: 1 },
+      ];
+    });
   }
   function removeGuess(idx: number) {
-    setGuesses(guesses.filter((_, i) => i !== idx));
+    setGuesses((gs) => {
+      const removed = gs[idx];
+      const next = gs.filter((_, i) => i !== idx);
+      // Recycle the freed chips into the first remaining guess so the total stays at 10.
+      if (removed && removed.chips > 0 && next.length > 0) {
+        return next.map((g, i) =>
+          i === 0 ? { ...g, chips: g.chips + removed.chips } : g
+        );
+      }
+      return next;
+    });
   }
 
   async function submit() {
@@ -1172,178 +1308,231 @@ function InvestingView({
   }
 
   const allocated = totalChips * 10;
-  const availableFmt = `$${(remaining * 10).toFixed(2)}`;
-  const allocatedFmt = `$${allocated.toFixed(0)}`;
-  const allocatedPct = Math.round((allocated / (CHIPS_PER_ROUND * 10)) * 100);
+
+  const onAccent = theme.buttonTextMode === "light" ? "#ffffff" : "#1a1a1a";
+  const cardBg = (() => {
+    const overlay = theme.mode === "dark" ? "rgb(255,255,255)" : "rgb(0,0,0)";
+    const top = `color-mix(in srgb, ${theme.bg} 92%, ${overlay})`;
+    const bottom = `color-mix(in srgb, ${theme.bg} 86%, ${overlay})`;
+    return `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
+  })();
+  const allDone = remaining === 0;
+  // Total seconds for the timer ring, falling back to 60 for older sessions.
+  const totalSeconds =
+    Number.isFinite(session.timer_seconds) && session.timer_seconds > 0
+      ? session.timer_seconds
+      : 60;
+  // Ring math for the inline timer in the status strip.
+  const ringSize = 44;
+  const ringStroke = 4;
+  const ringRadius = (ringSize - ringStroke) / 2;
+  const ringCirc = 2 * Math.PI * ringRadius;
+  const ringProgress = timerStarted
+    ? Math.max(0, Math.min(1, remainingS / totalSeconds))
+    : 0;
+  const ringOffset = ringCirc * (1 - ringProgress);
 
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0" style={{ color: theme.textPrimary }}>
-      {/* Question card */}
-      <TickerCard theme={theme}>
-        <div className="flex items-center justify-between gap-3 mb-1.5">
-          <p className="text-xs font-medium" style={{ color: theme.textMuted }}>
-            Round {(session.sm_current_question_order || 0) + 1}
+      {/* Status strip: countdown ring on left, allocation on right — minimal */}
+      <section
+        className="rounded-xl px-3 py-2.5 flex items-center gap-3"
+        style={{ background: cardBg, border: `1px solid ${theme.border}` }}
+      >
+        <div
+          className="relative shrink-0"
+          style={{ width: ringSize, height: ringSize }}
+        >
+          <svg
+            width={ringSize}
+            height={ringSize}
+            viewBox={`0 0 ${ringSize} ${ringSize}`}
+            aria-hidden="true"
+          >
+            <circle
+              cx={ringSize / 2}
+              cy={ringSize / 2}
+              r={ringRadius}
+              fill="none"
+              stroke={theme.border}
+              strokeWidth={ringStroke}
+            />
+            <circle
+              cx={ringSize / 2}
+              cy={ringSize / 2}
+              r={ringRadius}
+              fill="none"
+              stroke={theme.accent}
+              strokeWidth={ringStroke}
+              strokeLinecap="round"
+              strokeDasharray={ringCirc}
+              strokeDashoffset={ringOffset}
+              transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
+              style={{ transition: "stroke-dashoffset 0.4s linear" }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center leading-none">
+            <span
+              className="text-xs font-bold tabular-nums"
+              style={{ color: theme.textPrimary }}
+            >
+              {timerStarted ? remainingS : "—"}
+            </span>
+          </div>
+        </div>
+        <div className="ml-auto text-right leading-tight">
+          <p
+            className="text-[10px] uppercase tracking-[0.14em] font-semibold"
+            style={{ color: theme.textMuted }}
+          >
+            Allocated
           </p>
           <p
-            className="text-xs font-semibold tabular-nums"
-            style={{ color: theme.accent }}
+            className="text-base font-bold tabular-nums mt-0.5"
+            style={{
+              color: allDone ? theme.accent : theme.textPrimary,
+              fontFamily: getFontFamily(theme.headingFont),
+            }}
           >
-            {remainingS}s left
+            ${allocated}
+            <span
+              className="text-xs font-medium ml-0.5"
+              style={{ color: theme.textMuted }}
+            >
+              / ${CHIPS_PER_ROUND * 10}
+            </span>
           </p>
         </div>
+      </section>
+
+      {/* Question — centered visual anchor, with breathing room */}
+      <div className="px-2 py-6 text-center">
         <p
-          className="text-[15px] leading-snug font-semibold"
-          style={{ color: theme.textPrimary }}
+          className="text-[22px] font-bold leading-tight"
+          style={{
+            color: theme.textPrimary,
+            fontFamily: getFontFamily(theme.headingFont),
+          }}
         >
           {question.prompt}
         </p>
-      </TickerCard>
+      </div>
 
-      {/* Cash card — accent-color hero card */}
-      {(() => {
-        const onAccent = theme.buttonTextMode === "light" ? "#ffffff" : "#1a1a1a";
-        const onAccentMuted = `${onAccent === "#ffffff" ? "rgba(255,255,255,0.78)" : "rgba(26,26,26,0.7)"}`;
-        const chipBg = onAccent === "#ffffff" ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)";
-        const trackBg = onAccent === "#ffffff" ? "rgba(255,255,255,0.20)" : "rgba(0,0,0,0.15)";
-        return (
-          <section
-            className="rounded-lg p-3"
-            style={{
-              background: `linear-gradient(180deg, ${theme.accent} 0%, color-mix(in srgb, ${theme.accent} 80%, black) 100%)`,
-              boxShadow: `0 1px 2px ${theme.textPrimary}10, 0 12px 32px -16px ${theme.accent}80`,
-            }}
-          >
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <p
-                className="text-xs font-semibold"
-                style={{ color: onAccentMuted }}
-              >
-                Cash left
-              </p>
-              {allocated > 0 && (
-                <span
-                  className="text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
-                  style={{ background: chipBg, color: onAccent }}
-                >
-                  ▲ {allocatedFmt} ({allocatedPct}%)
-                </span>
-              )}
-            </div>
-            <p
-              className="text-2xl font-bold tabular-nums tracking-tight"
-              style={{
-                color: onAccent,
-                fontFamily: getFontFamily(theme.headingFont),
-              }}
-            >
-              {availableFmt}
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: onAccentMuted }}>
-              {remaining} of {CHIPS_PER_ROUND} chips left · {allocatedFmt} on the table
-            </p>
-            <div
-              className="mt-2 h-1 rounded-full overflow-hidden"
-              style={{ background: trackBg }}
-            >
-              <div
-                className="h-full transition-all"
-                style={{
-                  width: `${(totalChips / CHIPS_PER_ROUND) * 100}%`,
-                  background: onAccent,
-                }}
-              />
-            </div>
-          </section>
-        );
-      })()}
-
-      {/* Guesses */}
-      <TickerCard
-        theme={theme}
-        title="Your guesses"
-        tall
-        action={
-          <span className="text-xs" style={{ color: theme.textMuted }}>
-            {guesses.length} / {MAX_GUESSES_PER_ROUND}
-          </span>
-        }
-      >
-        <div className="space-y-2">
-          {guesses.map((g, idx) => (
+      {/* Guess list — each guess gets a clear input + chunky stepper */}
+      <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1 space-y-2.5">
+        {guesses.map((g, idx) => {
+          const filled = g.chips > 0;
+          return (
             <div
               key={idx}
-              className="rounded-md p-2.5"
+              className="rounded-xl p-3"
               style={{
-                // Nested row: stronger overlay than the parent card so it reads
-                // as inset. Still derived from bg so it follows palette changes.
-                background: (() => {
-                  const overlay = theme.mode === "dark" ? "rgb(255,255,255)" : "rgb(0,0,0)";
-                  const top = `color-mix(in srgb, ${theme.bg} 86%, ${overlay})`;
-                  const bottom = `color-mix(in srgb, ${theme.bg} 80%, ${overlay})`;
-                  return `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
-                })(),
-                border: `1px solid ${theme.border}`,
+                background: cardBg,
+                border: `1px solid ${filled ? theme.accent + "55" : theme.border}`,
+                transition: "border-color 0.15s",
               }}
             >
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex items-center gap-2">
                 <input
                   value={g.text}
                   onChange={(e) => updateText(idx, e.target.value)}
-                  placeholder={`Guess ${idx + 1}`}
-                  className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-sm bg-transparent focus:outline-none"
-                  style={{
-                    border: `1px solid ${theme.border}`,
-                    color: theme.textPrimary,
-                  }}
+                  placeholder={`Answer ${idx + 1}`}
+                  className="flex-1 min-w-0 text-base font-medium bg-transparent focus:outline-none"
+                  style={{ color: theme.textPrimary }}
                   maxLength={60}
                 />
                 {guesses.length > 1 && (
                   <button
                     onClick={() => removeGuess(idx)}
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0"
                     style={{
                       color: theme.textMuted,
                       border: `1px solid ${theme.border}`,
                     }}
-                    title="Remove guess"
+                    aria-label="Remove guess"
                   >
                     ✕
                   </button>
                 )}
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs" style={{ color: theme.textMuted }}>
-                  Bet
-                </span>
-                <PositionStepper
-                  theme={theme}
-                  onDecrement={() => removeChip(idx)}
-                  onIncrement={() => addChip(idx)}
-                  canDecrement={g.chips > 0}
-                  canIncrement={remaining > 0}
-                  label={`$${g.chips * 10}`}
-                />
+
+              <div
+                className="flex items-center justify-between mt-3 pt-3"
+                style={{ borderTop: `1px solid ${theme.border}` }}
+              >
+                <div className="leading-none">
+                  <p
+                    className="text-[10px] uppercase tracking-[0.14em] font-semibold mb-1"
+                    style={{ color: theme.textMuted }}
+                  >
+                    Your bet
+                  </p>
+                  <p
+                    className="text-2xl font-bold tabular-nums"
+                    style={{
+                      color: filled ? theme.accent : theme.textMuted,
+                      fontFamily: getFontFamily(theme.headingFont),
+                    }}
+                  >
+                    ${g.chips * 10}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => removeChip(idx)}
+                    disabled={g.chips === 0}
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-2xl font-bold disabled:opacity-30 transition active:scale-95"
+                    style={{
+                      background: "transparent",
+                      border: `1.5px solid ${theme.border}`,
+                      color: theme.textPrimary,
+                    }}
+                    aria-label="Lower bet"
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addChip(idx)}
+                    disabled={remaining === 0}
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-2xl font-bold disabled:opacity-30 transition active:scale-95"
+                    style={{
+                      background: theme.accent,
+                      color: onAccent,
+                      border: `1.5px solid ${theme.accent}`,
+                    }}
+                    aria-label="Raise bet"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
+
         {guesses.length < MAX_GUESSES_PER_ROUND && (
           <button
             onClick={addGuess}
-            className="mt-2 w-full py-1.5 rounded-md text-xs font-medium"
+            className="w-full py-2.5 rounded-xl text-sm font-medium"
             style={{
               color: theme.accent,
               border: `1px dashed ${theme.accent}55`,
               background: "transparent",
             }}
           >
-            + Add another guess
+            + Add another answer
           </button>
         )}
-      </TickerCard>
+      </div>
 
       {error && (
-        <p className="text-xs font-semibold" style={{ color: theme.danger }}>
+        <p
+          className="text-xs font-semibold text-center"
+          style={{ color: theme.danger }}
+        >
           {error}
         </p>
       )}
@@ -1358,7 +1547,7 @@ function InvestingView({
           ? "Locked in ✓"
           : remaining === 0
             ? "Lock in bets"
-            : `Bet all $${CHIPS_PER_ROUND * 10} to lock in`}
+            : `$${remaining * 10} left to allocate`}
       </MarketButton>
     </div>
   );
@@ -1402,11 +1591,12 @@ function RevealView({
   meId: string;
   spotlightId: string | null;
 }) {
-  const stake = 10000;
+  // The per-round $100 is a fresh allowance — the player's "net" for the
+  // round is simply their gross payout (never negative).
   const payout = myBets.reduce((s, b) => s + b.payout_cents, 0);
-  const net = payout - (myBets.length > 0 ? stake : 0);
+  const net = payout;
   const netDirection: "up" | "down" | "neutral" =
-    net > 0 ? "up" : net < 0 ? "down" : "neutral";
+    net > 0 ? "up" : "neutral";
 
   // Per-player net for this round (everyone but the spotlight).
   const roundResults = useMemo(() => {
@@ -1424,7 +1614,7 @@ function RevealView({
         );
         return {
           player: p,
-          net: playerPayout - (playerStaked ? stake : 0),
+          net: playerPayout,
           played: playerStaked,
         };
       })
@@ -2295,15 +2485,9 @@ function BetsAndStandingsTabs({
           ) : (
             <div className="space-y-2.5">
               {rounds.map((r) => {
-                const net = r.payout - r.stake;
+                const net = r.payout;
                 const rDir: "up" | "down" | "neutral" =
-                  !r.revealed
-                    ? "neutral"
-                    : net > 0
-                      ? "up"
-                      : net < 0
-                        ? "down"
-                        : "neutral";
+                  !r.revealed ? "neutral" : net > 0 ? "up" : "neutral";
                 return (
                   <div
                     key={r.question.id}
