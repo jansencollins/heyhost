@@ -61,8 +61,10 @@ function formatDollars(cents: number): string {
 // long accelerating drop, brief bounce — then loops seamlessly. Random scroll
 // duration each mount so the rhythm can't be used to time the 10s crash window.
 function CrashSpinner({ color }: { color: string }) {
-  const [duration] = useState(() => (3.2 + Math.random() * 3.8).toFixed(2));
-  const [curve] = useState(() => generateCrashCurve(70));
+  // Slower scroll so the chart reads as a tense, drawn-out crash instead of
+  // a frantic ticker. Randomized so the rhythm can't be used to time the 10s.
+  const [duration] = useState(() => (8 + Math.random() * 4).toFixed(2));
+  const [curve] = useState(() => generateCrashCurve(100));
 
   const width = 200;
   const height = 60;
@@ -114,22 +116,31 @@ function CrashSpinner({ color }: { color: string }) {
 
 function generateCrashCurve(n: number): number[] {
   const points: number[] = [];
+  // Layered sine waves give the chart multiple dramatic peaks/valleys instead
+  // of one smooth slope. The waves' periods are co-prime-ish so the pattern
+  // never visually repeats inside a single segment.
+  const minY = 2;
+  const maxY = 56;
   for (let i = 0; i < n; i++) {
     const progress = i / (n - 1);
     let trend: number;
-    if (progress < 0.15) {
+    if (progress < 0.12) {
       // small rally — climbing (Y decreases)
-      trend = 30 - (progress / 0.15) * 18;
+      trend = 30 - (progress / 0.12) * 16;
     } else if (progress < 0.92) {
-      // accelerating crash
-      const crashP = (progress - 0.15) / 0.77;
-      trend = 12 + Math.pow(crashP, 2.2) * 42;
+      // accelerating crash with two intermediate dead-cat-bounce peaks for drama
+      const crashP = (progress - 0.12) / 0.8;
+      const base = 14 + Math.pow(crashP, 2.0) * 38;
+      const wave1 = Math.sin(crashP * Math.PI * 3.3) * 11;
+      const wave2 = Math.sin(crashP * Math.PI * 6.7) * 6;
+      trend = base + wave1 + wave2;
     } else {
-      // brief bounce back toward seam value
-      trend = 54 - ((progress - 0.92) / 0.08) * 24;
+      // sharp bounce back toward seam value
+      trend = 56 - ((progress - 0.92) / 0.08) * 26;
     }
-    const jitter = (Math.random() - 0.5) * 5;
-    points.push(Math.max(2, Math.min(56, trend + jitter)));
+    // Bigger jitter for a more chaotic, hand-drawn look.
+    const jitter = (Math.random() - 0.5) * 12;
+    points.push(Math.max(minY, Math.min(maxY, trend + jitter)));
   }
   // Force first/last points to match for a seamless loop seam.
   points[points.length - 1] = points[0];
@@ -2095,14 +2106,14 @@ function CrashView({
 
   const crashHeader = (
     <div
-      className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
+      className="flex flex-col items-center text-center gap-2 rounded-xl px-4 py-3.5"
       style={{
         background: `color-mix(in srgb, ${theme.danger} 12%, transparent)`,
         border: `1px solid color-mix(in srgb, ${theme.danger} 35%, transparent)`,
       }}
     >
       <svg
-        className="w-5 h-5 shrink-0"
+        className="w-9 h-9"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -2212,16 +2223,40 @@ function CrashView({
 
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
+      {/* Wrap the crashing TickerCard so the alert flash is scoped to just this
+          card (not the player profile header or the rest of the phone). */}
+      <div className="relative flex-1 min-h-0 flex flex-col rounded-lg overflow-hidden">
+        <div
+          aria-hidden
+          className="absolute inset-0 z-10 pointer-events-none crash-alert-flash"
+          style={{ background: theme.danger, mixBlendMode: "screen" }}
+        />
+        <style>{`
+          @keyframes crash-alert-flash-kf {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 0.22; }
+          }
+          .crash-alert-flash {
+            animation: crash-alert-flash-kf 1.6s ease-in-out infinite;
+          }
+        `}</style>
       <TickerCard theme={theme} tall>
-        <div className="text-center space-y-3 py-2">
+        <div className="text-center py-2">
           <CrashSpinner color={theme.danger} />
-          <p className="text-xs" style={{ color: theme.textMuted }}>
-            Market is crashing! Press cash out before the <span className="font-semibold" style={{ color: theme.textPrimary }}>10 second timer</span> is up to save your investment for this round.
+          <p
+            className="text-base leading-relaxed mt-16 px-2"
+            style={{ color: theme.textMuted }}
+          >
+            Market is crashing! Press cash out before the{" "}
+            <span className="font-semibold" style={{ color: theme.textPrimary }}>
+              10 second timer
+            </span>{" "}
+            is up to save your investment for this round.
           </p>
           <button
             onClick={cashout}
             disabled={submitting}
-            className="cashout-pulse-btn w-full py-3 rounded-full text-sm font-semibold disabled:opacity-50 active:scale-[0.99] transition my-3"
+            className="cashout-pulse-btn w-full py-3 rounded-full text-sm font-semibold disabled:opacity-50 active:scale-[0.99] transition mt-12 mb-3"
             style={{
               background: theme.danger,
               color: "#ffffff",
@@ -2257,6 +2292,7 @@ function CrashView({
           )}
         </div>
       </TickerCard>
+      </div>
     </div>
   );
 }

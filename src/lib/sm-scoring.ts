@@ -194,14 +194,11 @@ export function computeKnowabilityScore(allBets: BetInput[]): number {
   return Math.round((correctCents / totalCents) * 100);
 }
 
-/** Format cents as a friendly string: 12345 → "$123.45", -5000 → "−$50.00" */
+/** Format cents as a friendly whole-dollar string: 12345 → "$123", -4990 → "−$50" */
 export function formatCents(cents: number): string {
-  const negative = cents < 0;
-  const abs = Math.abs(cents);
-  const dollars = Math.floor(abs / 100);
-  const remainder = abs % 100;
-  const padded = remainder.toString().padStart(2, "0");
-  return `${negative ? "−" : ""}$${dollars.toLocaleString()}.${padded}`;
+  const dollars = Math.round(cents / 100);
+  const sign = dollars < 0 ? "−" : "";
+  return `${sign}$${Math.abs(dollars).toLocaleString()}`;
 }
 
 /** Normalize a guess for de-dup and exact matching against the spotlight answer. */
