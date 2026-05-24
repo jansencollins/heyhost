@@ -1506,7 +1506,7 @@ function CrashScreen({
       />
 
       {/* Heading sits on solid bg above the chart, so it stays legible */}
-      <div className="shrink-0 text-center px-8 pt-5 pb-4">
+      <div className="shrink-0 text-center px-8 pt-12 pb-4">
         <h1
           className="text-5xl font-bold tracking-tight leading-[1.05]"
           style={{
