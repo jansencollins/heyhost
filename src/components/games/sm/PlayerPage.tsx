@@ -15,6 +15,7 @@ import {
 import { GamePausedOverlay } from "@/components/games/GamePausedOverlay";
 import { getFontFamily } from "@/lib/theme-fonts";
 import { getCardCss } from "@/lib/theme-styles";
+import { useServerTimeOffset } from "@/lib/server-time";
 import {
   TickerCard,
   PriceQuote,
@@ -1067,11 +1068,13 @@ function SpotlightAnswerView({
   const [saved, setSaved] = useState(
     !!session.sm_current_spotlight_answer && session.sm_current_spotlight_answer !== ""
   );
-  const [now, setNow] = useState(() => Date.now());
+  const offset = useServerTimeOffset();
+  const [now, setNow] = useState(() => Date.now() + offset);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 500);
+    setNow(Date.now() + offset);
+    const t = setInterval(() => setNow(Date.now() + offset), 500);
     return () => clearInterval(t);
-  }, []);
+  }, [offset]);
 
   // If a different question loaded, reset the local state.
   useEffect(() => {
@@ -1191,11 +1194,13 @@ function InvestingView({
   const totalChips = guesses.reduce((s, g) => s + g.chips, 0);
   const remaining = CHIPS_PER_ROUND - totalChips;
 
-  const [now, setNow] = useState(() => Date.now());
+  const offset = useServerTimeOffset();
+  const [now, setNow] = useState(() => Date.now() + offset);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 500);
+    setNow(Date.now() + offset);
+    const t = setInterval(() => setNow(Date.now() + offset), 500);
     return () => clearInterval(t);
-  }, []);
+  }, [offset]);
   const timerStarted = !!session.sm_phase_end_timestamp;
   const remainingS = session.sm_phase_end_timestamp
     ? Math.max(

@@ -12,6 +12,7 @@ import {
   RemotePlayerRow,
 } from "@/components/games/host/RemoteUI";
 import { formatCents, normalizeGuess } from "@/lib/sm-scoring";
+import { useServerTimeOffset } from "@/lib/server-time";
 import type {
   Game,
   Session,
@@ -485,11 +486,13 @@ function InvestingControls(props: {
 }) {
   const submittedPlayerIds = new Set(props.bets.map((b) => b.player_id));
   const submittedCount = submittedPlayerIds.size;
-  const [now, setNow] = useState(() => Date.now());
+  const offset = useServerTimeOffset();
+  const [now, setNow] = useState(() => Date.now() + offset);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
+    setNow(Date.now() + offset);
+    const t = setInterval(() => setNow(Date.now() + offset), 250);
     return () => clearInterval(t);
-  }, []);
+  }, [offset]);
   const timerStarted = !!props.endsAt;
   const remainingMs = props.endsAt
     ? Math.max(0, new Date(props.endsAt).getTime() - now)

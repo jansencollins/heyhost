@@ -12,6 +12,7 @@ import {
 } from "@/lib/sm-scoring";
 import { GamePausedOverlay } from "@/components/games/GamePausedOverlay";
 import { getFontFamily } from "@/lib/theme-fonts";
+import { useServerTimeOffset } from "@/lib/server-time";
 import type {
   Game,
   GameTheme,
@@ -833,11 +834,13 @@ function InvestingScreen({
   roundOrder: number;
   totalRounds: number;
 }) {
-  const [now, setNow] = useState(() => Date.now());
+  const offset = useServerTimeOffset();
+  const [now, setNow] = useState(() => Date.now() + offset);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
+    setNow(Date.now() + offset);
+    const t = setInterval(() => setNow(Date.now() + offset), 250);
     return () => clearInterval(t);
-  }, []);
+  }, [offset]);
   const remaining = endsAt
     ? Math.max(0, Math.ceil((new Date(endsAt).getTime() - now) / 1000))
     : 0;
@@ -1458,11 +1461,13 @@ function CrashScreen({
   roundOrder: number;
   totalRounds: number;
 }) {
-  const [now, setNow] = useState(() => Date.now());
+  const offset = useServerTimeOffset();
+  const [now, setNow] = useState(() => Date.now() + offset);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 50);
+    setNow(Date.now() + offset);
+    const t = setInterval(() => setNow(Date.now() + offset), 50);
     return () => clearInterval(t);
-  }, []);
+  }, [offset]);
   const startMs = crashStartedAt ? new Date(crashStartedAt).getTime() : now;
   const elapsed = Math.max(0, now - startMs);
   const past = elapsed >= CRASH_DURATION_MS + 500;
